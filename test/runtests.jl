@@ -1,5 +1,7 @@
-using MCMCHarmonicMean
-using Base.Test
+# This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
-# write your own tests here
-@test 1 == 2
+using Compat.Test
+@testset "Package MCMCHarmonicMean" begin
+
+
+end
