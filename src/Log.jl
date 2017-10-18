@@ -1,9 +1,10 @@
+# This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 export SetLogLevel, SetLogToFileLevel
 export LogLow, Log, LogHigh, LogMedium
 export SetLogFile, SetPriorityLogFile
 
-LogLevel = 0
+LogLevel = 1
 LogToFileLevel = 2
 
 LogFile = "Log.txt"

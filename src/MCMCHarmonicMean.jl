@@ -9,19 +9,32 @@ using ProgressMeter
 using Distributions
 using HDF5
 using StatsBase
+using BAT
 
 
 include("./DataTypes.jl")
-include("./ImportData.jl")
 
 # include("./DataTree.jl")
 include("./DataTreeList.jl")
+
+include("./PointCloud.jl")
+include("./IntegrationVolume.jl")
+include("./ImportData.jl")
+
 
 include("./Hyperrectangle.jl")
 include("./WhiteningTransformation.jl")
 include("./HarmonicMeanIntegration.jl")
 
 include("./Log.jl")
+
+
+export DataSet
+export integrate
+
+export IntegrationResult
+export IntegrationVolume
+export PointCloud
 
 
 end # module

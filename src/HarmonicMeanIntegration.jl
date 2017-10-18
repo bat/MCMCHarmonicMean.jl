@@ -1,46 +1,43 @@
-
-
-
-
-export Integrate
-export CreateHyperrectangle
-
+# This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 """
     Integrate(Data::DataSet)::IntegrationResult
 
-This function starts the Harmonic Mean Integration.
+This function starts the Harmonic Mean Integration. It needs a data set as input (see DataSet documentation). When loading data from a
+file (either HDF5 or ROOT) the function
+function LoadMCMCData(path::String, params::Array{String}, range = Colon(), modelname::String = "", dataFormat::DataType = Float64)::DataSet()
+can be used.
 """
-function Integrate(Data::DataSet)::IntegrationResult
-    if Data.N < Data.P * 50
+function integrate(dataset::DataSet)::IntegrationResult
+    if dataset.N < dataset.P * 50
         error("Not enough points for integration")
     end
 
-    LogHigh("Integration started. Data Points:\t$(Data.N)\tParameters:\t$(Data.P)")
+    LogHigh("Integration started. Data Points:\t$(dataset.N)\tParameters:\t$(dataset.P)")
     LogHigh("Data Whitening")
 
-    #whitening_result = CholeskyWhitening(Data)
-    whitening_result = StatisticalWhitening(Data)
+    whiteningresult = cholesky_whitening(dataset)
+    #whiteningresult = statistical_whitening(dataset)
 
-    tree = CreateSearchTree(Data)
+    datatree = create_search_tree(dataset)
 
     LogHigh("Find possible Hyperrectangle Centers")
-    centerIDs = FindHypercubeCenters(Data, tree, whitening_result.SuggTarProbDiff, whitening_result.BoundingBox)
-    Rectangles = Array{Hyperrectangle, 1}()
+    centerIDs = find_hypercube_centers(dataset, datatree, whiteningresult)
+    volumes = Vector{IntegrationVolume}(0)
 
     LogHigh("Find good tolerances for Hyperrectangle Creation")
 
     vInc = zeros(0)
     pInc = zeros(0)
-    pts = 10 * Data.P
+    pts = 10 * dataset.P
     for id = 1:10
-        c = FindDensityTestCube(Data.Data[:, centerIDs[id]], tree, pts)
-        prevv = c[1]^Data.P
-        prevp = c[2].Points
+        c = find_density_test_cube(dataset.data[:, centerIDs[id]], datatree, pts)
+        prevv = c[1]^dataset.P
+        prevp = c[2].pointcloud.points
         for i in [2, 3, 4, 6, 8] * pts
-            c = FindDensityTestCube(Data.Data[:, centerIDs[id]], tree, i)
-            v = c[1]^Data.P
-            p = c[2].Points
+            c = find_density_test_cube(dataset.data[:, centerIDs[id]], datatree, i)
+            v = c[1]^dataset.P
+            p = c[2].pointcloud.points
             if v/prevv/p*prevp < 1
                 prevv = v
                 prevp = p
@@ -75,8 +72,8 @@ function Integrate(Data::DataSet)::IntegrationResult
     @showprogress for i in centerIDs
         #check if id is inside an existing Hyperrectangle
         insideRectangle = false
-        for rect in Rectangles
-            if in(i, rect.PointIDs)
+        for vol in volumes
+            if in(i, vol.pointcloud.pointIDs)
                 iterations_skipped += 1
                 insideRectangle = true
                 break
@@ -87,12 +84,12 @@ function Integrate(Data::DataSet)::IntegrationResult
         end
         iterations += 1
 
-        rectangle = CreateHyperrectangle(Data.Data[:, i], tree, Rectangles, whitening_result.SuggTarProbDiff, whitening_result.BoundingBox, suggTol)
+        vol = create_hyperrectangle(dataset.data[:, i], datatree, volumes, whiteningresult, suggTol)
 
 
         isRectInsideAnother = false
-        for other in Rectangles
-            overlap = CalculateOverlapping(rectangle, other.Cube)
+        for other in volumes
+            overlap = calculate_overlapping(vol, other.spatialvolume)
             if overlap > 0.5
                 isRectInsideAnother = true
                 break
@@ -101,17 +98,15 @@ function Integrate(Data::DataSet)::IntegrationResult
         if isRectInsideAnother
             iterations_skipped += 1
             LogLow("Hyperrectangle (ID = $i) discarded because it was inside another Rectangle.")
-        elseif rectangle.ProbFactor == 1.0 || rectangle.Points < Data.P * 4
-            LogLow("Hyperrectangle (ID = $i ) discarded because it has not enough Points.\tPoints:\t" *
-                string(rectangle.Points) * "\tProb. Factor:\t" * string(rectangle.ProbFactor))
+        elseif vol.pointcloud.probfactor == 1.0 || vol.pointcloud.points < dataset.P * 4
+            LogLow("Hyperrectangle (ID = $i ) discarded because it has not enough Points.\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
         else
-            push!(Rectangles, rectangle)
+            push!(volumes, vol)
 
 
-            LogMedium(string(length(Rectangles)) * ". Hyperrectangle (ID = $i ) found. Rectangles discarded: $iterations_skipped\tPoints:\t" *
-                string(rectangle.Points) * "\tProb. Factor:\t" * string(rectangle.ProbFactor))
-            if rectangle.Points > maxPoints
-                maxPoints = rectangle.Points
+            LogMedium("$(length(volumes)). Hyperrectangle (ID = $i ) found. Rectangles discarded: $iterations_skipped\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
+            if vol.pointcloud.points > maxPoints
+                maxPoints = vol.pointcloud.points
             end
         end
 
@@ -120,10 +115,10 @@ function Integrate(Data::DataSet)::IntegrationResult
 
 
     #remove rectangles with less than 10% points of the largest rectangle (in terms of points)
-    j = length(Rectangles)
-    for i = 1:length(Rectangles)
-        if Rectangles[j].Points < maxPoints * 0.01
-            deleteat!(Rectangles, j)
+    j = length(volumes)
+    for i = 1:length(volumes)
+        if volumes[j].pointcloud.points < maxPoints * 0.01
+            deleteat!(volumes, j)
         end
         j -= 1
     end
@@ -131,18 +126,18 @@ function Integrate(Data::DataSet)::IntegrationResult
 
     LogHigh("Integrate Hyperrectangle")
 
-    nRes = length(Rectangles)
+    nRes = length(volumes)
     IntResults = Array{IntermediateResult, 1}(nRes)
 
     @showprogress for i in 1:nRes
-        IntResults[i] = IntegrateHyperrectangleWithError(tree, Data.LogProb, Data.Weights, Rectangles[i], whitening_result.Determinant)
-        LogMedium("$i. Integral: "* string(IntResults[i].Integral) * "\tVolume\t" * string(IntResults[i].Volume) * "\tPoints:\t" * string(IntResults[i].Points))
+        IntResults[i] = integrate_hyperrectangle(datatree, dataset, volumes[i], whiteningresult.determinant)
+        LogMedium("$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)")
     end
 
     #remove integrals with no result
     j = nRes
     for i = 1:nRes
-        if isnan(IntResults[j].Integral)
+        if isnan(IntResults[j].integral)
             deleteat!(IntResults, j)
         end
         j -= 1
@@ -155,35 +150,43 @@ function Integrate(Data::DataSet)::IntegrationResult
     volume = 0.0
     #normerror = 0.0
     for i = 1:nRes
-        result += IntResults[i].Integral / nRes#(IntResults[i].Error / IntResults[i].Integral)
+        result += IntResults[i].integral / nRes#(IntResults[i].Error / IntResults[i].Integral)
         #normerror += 1 / (IntResults[i].Error / IntResults[i].Integral)
-        points += IntResults[i].Points / nRes
-        volume += IntResults[i].Volume / nRes
+        points += IntResults[i].points / nRes
+        volume += IntResults[i].volume / nRes
     end
     #result /= normerror
     for i in 1:nRes
-        error += (IntResults[i].Integral - result)^2
+        error += (IntResults[i].integral - result)^2
     end
     error = sqrt(error / (nRes - 1))
     if nRes == 1
-        error = IntResults[1].Error
+        error = IntResults[1].error
     end
 
-    return IntegrationResult(result, error, nRes, points, volume, Rectangles, centerIDs, whitening_result)
+    LogHigh("Integration Result:\t $result +- $error\tRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume")
+    return IntegrationResult(result, error, nRes, points, volume, volumes, centerIDs, whiteningresult)
 end
 
-function CreateHyperrectangle(Mode::Array{Float64, 1}, DataTree::Tree, Rectangles::Array{Hyperrectangle, 1},
-        ProbFactor::Float64, BoundingBox::Array{Float64, 2}, Tolerance::Float64 = 1.2)
-    P = DataTree.P
-    N = DataTree.N
+#=
+"""
+    function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volumes::Vector{IntegrationVolume}, whiteningresult::WhiteningResult, Tolerance::Float64)::IntegrationVolume
 
-    lengthCube = 1.0
+This function tries to create a hyper-rectangle around a starting point. It builds a cube first and adapts each face of individually to fit to the data as good as possible.
+If the creation process fails a rectangle with no or only one point might be returned (check probfactor). The creation process might also be stopped because the rectangle overlaps
+with another.
+"""
+=#
+function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volumes::Vector{IntegrationVolume}, whiteningresult::WhiteningResult, Tolerance::Float64)::IntegrationVolume
+    edgelength = 1.0
 
-    cube = Hypercube(Mode, DataTree, lengthCube, true)
+    cube = HyperCubeVolume(Mode, edgelength)
+    vol = IntegrationVolume(datatree, cube, true)
 
-    while cube.Points > 0.01 * N
-        lengthCube *= 0.5
-        cube = Hypercube(Mode, DataTree, lengthCube, true)
+    while vol.pointcloud.points > 0.01 * datatree.N
+        edgelength *= 0.5
+        HyperCubeVolume!(cube, Mode, edgelength)
+        IntegrationVolume!(vol, datatree, cube, true)
     end
     tol = 1.0
     step = 0.7
@@ -191,62 +194,64 @@ function CreateHyperrectangle(Mode::Array{Float64, 1}, DataTree::Tree, Rectangle
     PtsIncrease = 0.0
     VolIncrease = 1.0
 
-    while cube.ProbFactor < ProbFactor / tol || cube.ProbFactor > ProbFactor
+    while vol.pointcloud.probfactor < whiteningresult.targetprobfactor / tol || vol.pointcloud.probfactor > whiteningresult.targetprobfactor
         tol += 0.1
 
-        if cube.ProbFactor > ProbFactor
+        if vol.pointcloud.probfactor > whiteningresult.targetprobfactor
             #decrease side length
-            VolIncrease = lengthCube^P
-            lengthCube *= step
-            VolIncrease = lengthCube^P / VolIncrease
+            VolIncrease = edgelength^datatree.P
+            edgelength *= step
+            VolIncrease = edgelength^datatree.P / VolIncrease
 
-            step = AdjustStepSize(step, direction == -1)
+            step = adjuststepsize!(step, direction == -1)
             direction = -1
         else
             #increase side length
-            VolIncrease = lengthCube^P
-            lengthCube /= step
-            VolIncrease = lengthCube^P / VolIncrease
+            VolIncrease = edgelength^datatree.P
+            edgelength /= step
+            VolIncrease = edgelength^datatree.P / VolIncrease
 
-            step = AdjustStepSize(step, direction == 1)
+            step = adjuststepsize!(step, direction == 1)
             direction = 1
         end
-        PtsIncrease = cube.Points
-        cube = Hypercube(Mode, DataTree, lengthCube, true)
-        PtsIncrease = cube.Points / PtsIncrease
+        PtsIncrease = vol.pointcloud.points
+        HyperCubeVolume!(cube, Mode, edgelength)
+        IntegrationVolume!(vol, datatree, cube ,true)
 
-        if cube.Points > 0.01 * N && cube.ProbFactor < ProbFactor
+        PtsIncrease = vol.pointcloud.points / PtsIncrease
+
+        if vol.pointcloud.points > 0.01 * datatree.N && vol.pointcloud.probfactor < whiteningresult.targetprobfactor
             break
         end
     end
 
 
     #adjust cube to  bounding box if necessary
-    newdimensions = deepcopy(cube.Cube)
-    for p = 1:P
-        if cube.Cube[p, 1] < BoundingBox[p, 1]
-            width = cube.Cube[p, 2] - cube.Cube[p, 1]
-            newdimensions[p, 1] = BoundingBox[p, 1]
-            cube = ResizeHyperrectangle(DataTree, p, cube, newdimensions, true)
-            if cube.Cube[p, 1] >= cube.Cube[p, 2]
-                newdimensions[p, 2] = min(cube.Cube[p, 2] + width, BoundingBox[p, 2])
-                cube = ResizeHyperrectangle(DataTree, p, cube, newdimensions, true)
+    newcube = deepcopy(cube)
+    for p = 1:datatree.P
+        if cube.lo[p] < whiteningresult.boundingbox[p, 1]
+            width = cube.hi[p] - cube.lo[p]
+            newcube.lo[p] = whiteningresult.boundingbox[p, 1]
+            vol = resize_integrationvol(datatree, p, vol, newcube, true)
+            if cube.lo[p] >= cube.hi[p]
+                newcube.hi[p] = min(cube.hi[p] + width, whiteningresult.boundingbox[p, 2])
+                vol = resize_integrationvol(datatree, p, vol, newcube, true)
             end
         end
 
-        if cube.Cube[p, 2] > BoundingBox[p, 2]
-            width = cube.Cube[p, 2] - cube.Cube[p, 1]
-            newdimensions[p, 2] = BoundingBox[p, 2]
-            cube = ResizeHyperrectangle(DataTree, p, cube, newdimensions, true)
-            if cube.Cube[p, 2] <= cube.Cube[p, 1]
-                newdimensions[p, 1] = max(cube.Cube[p, 1] - width, BoundingBox[p, 1])
-                cube = ResizeHyperrectangle(DataTree, p, cube, newdimensions, true)
+        if cube.hi[p] > whiteningresult.boundingbox[p, 2]
+            width = cube.hi[p] - cube.lo[p]
+            newcube.hi[p] = whiteningresult.boundingbox[p, 2]
+            vol = resize_integrationvol(datatree, p, vol, newcube, true)
+            if cube.hi[p] <= cube.lo[p]
+                newcube.lo[p] = max(cube.lo[p] - width, whiteningresult.boundingbox[p, 1])
+                vol = resize_integrationvol(datatree, p, vol, newcube, true)
             end
         end
     end
 
 
-    LogLow("\tTEST Hyperrectangle Points:\t" * string(cube.Points) * "\tVolume:\t" * string(cube.Volume) * "\tProb. Factor:\t" * string(cube.ProbFactor))
+    LogLow("\tTEST Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
 
     #check each dimension
     #1. Is Inside Bounding Box?
@@ -261,30 +266,30 @@ function CreateHyperrectangle(Mode::Array{Float64, 1}, DataTree::Tree, Rectangle
     ptsTolInc = Tolerance
     ptsTolDec = Tolerance + (Tolerance - 1) * 1.5
 
-    dimensionsFinished = falses(P)
-    dimensions = deepcopy(cube.Cube)
+    dimensionsFinished = falses(datatree.P)
+    spvol = deepcopy(vol.spatialvolume)
     buffer = 0.0
 
     increase = 0.1
     decrease = 1.0 - 1.0 / (1.0 + increase)
 
-    while wasCubeChanged && cube.ProbFactor > 1.0
+    while wasCubeChanged && vol.pointcloud.probfactor > 1.0
 
         wasCubeChanged = false
 
         isRectInsideAnother = false
-        for other in Rectangles
-            if CalculateOverlapping(cube, other.Cube) > 0.5
+        for other in volumes
+            if calculate_overlapping(vol, other.spatialvolume) > 0.5
                 isRectInsideAnother = true
                 break
             end
         end
         if isRectInsideAnother
-            return cube
+            return vol
         end
 
 
-        for p = 1:P
+        for p = 1:datatree.P
             if dimensionsFinished[p]
                 #risky, can improve results but may lead to endless loop
                 #dimensionsFinished[p] = false
@@ -295,88 +300,88 @@ function CreateHyperrectangle(Mode::Array{Float64, 1}, DataTree::Tree, Rectangle
 
             #adjust lower bound
             change1 = true
-            while change1 && cube.ProbFactor > 1.0
+            while change1 && vol.pointcloud.probfactor > 1.0
                 change1 = false
-                margin = dimensions[p, 2] - dimensions[p, 1]
-                buffer = dimensions[p, 1]
-                dimensions[p, 1] -= margin * increase
+                margin = spvol.hi[p] - spvol.lo[p]
+                buffer = spvol.lo[p]
+                spvol.lo[p] -= margin * increase
 
-                PtsIncrease = cube.Points
-                newcube = ResizeHyperrectangle(DataTree, p, cube, dimensions)
+                PtsIncrease = vol.pointcloud.points
+                newvol = resize_integrationvol(datatree, p, vol, spvol, false)
 
-                PtsIncrease = newcube.Points / PtsIncrease
-                if newcube.ProbFactor < ProbFactor && PtsIncrease > (1.0 + increase / ptsTolInc) && newcube.Cube[p, 1] > BoundingBox[p, 1]
-                    cube = newcube
+                PtsIncrease = newvol.pointcloud.points / PtsIncrease
+                if newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc) && newvol.spatialvolume.lo[p] > whiteningresult.boundingbox[p, 1]
+                    vol = newvol
                     wasCubeChanged = true
                     change = true
                     change1 = true
-                    LogLow("\tTEST up p=$p Hyperrectangle Points:\t" * string(cube.Points) * "\tVolume:\t" * string(cube.Volume) * "\tProb. Factor:\t" * string(cube.ProbFactor))
+                    LogLow("\tTEST up p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
                 else
                     #revert changes
-                    dimensions[p, 1] = buffer
+                    spvol.lo[p] = buffer
 
-                    margin = dimensions[p, 2] - dimensions[p, 1]
-                    buffer = dimensions[p, 1]
-                    dimensions[p, 1] += margin * decrease
+                    margin = spvol.hi[p] - spvol.lo[p]
+                    buffer = spvol.lo[p]
+                    spvol.lo[p] += margin * decrease
 
-                    PtsIncrease = cube.Points
-                    newcube = ResizeHyperrectangle(DataTree, p, cube, dimensions)
+                    PtsIncrease = vol.pointcloud.points
+                    newvol = resize_integrationvol(datatree, p, vol, spvol, false)
 
-                    PtsIncrease = newcube.Points / PtsIncrease
+                    PtsIncrease = newvol.pointcloud.points / PtsIncrease
 
                     if PtsIncrease > (1 - decrease / ptsTolDec)
-                        cube = newcube
+                        vol = newvol
                         wasCubeChanged = true
                         change = true
                         change1 = true
-                        LogLow("\tTEST up p=$p Hyperrectangle Points:\t" * string(cube.Points) * "\tVolume:\t" * string(cube.Volume) * "\tProb. Factor:\t" * string(cube.ProbFactor))
+                        LogLow("\tTEST up p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
                     else
                         #revert changes
-                        dimensions[p, 1] = buffer
+                        spvol.lo[p] = buffer
                     end
                 end
             end
 
             #adjust upper bound
             change2 = true
-            while change2 && cube.ProbFactor > 1.0
+            while change2 && vol.pointcloud.probfactor > 1.0
                 change2 = false
-                margin = dimensions[p, 2] - dimensions[p, 1]
-                buffer = dimensions[p, 2]
-                dimensions[p, 2] += margin * increase
+                margin = spvol.hi[p] - spvol.lo[p]
+                buffer = spvol.hi[p]
+                spvol.hi[p] += margin * increase
 
-                PtsIncrease = cube.Points
-                newcube = ResizeHyperrectangle(DataTree, p, cube, dimensions)
+                PtsIncrease = vol.pointcloud.points
+                newvol = resize_integrationvol(datatree, p, vol, spvol, false)
 
-                PtsIncrease = newcube.Points / PtsIncrease
-                if newcube.ProbFactor < ProbFactor && PtsIncrease > (1.0 + increase / ptsTolInc) && newcube.Cube[p, 2] < BoundingBox[p, 2]
-                    cube = newcube
+                PtsIncrease = newvol.pointcloud.points / PtsIncrease
+                if newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc) && newvol.spatialvolume.hi[p] < whiteningresult.boundingbox[p, 2]
+                    vol = newvol
                     wasCubeChanged = true
                     change = true
                     change2 = true
-                    LogLow("\tTEST lo p=$p Hyperrectangle Points:\t" * string(cube.Points) * "\tVolume:\t" * string(cube.Volume) * "\tProb. Factor:\t" * string(cube.ProbFactor))
+                    LogLow("\tTEST up p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
                 else
                     #revert changes
-                    dimensions[p, 2] = buffer
+                    spvol.hi[p] = buffer
 
-                    margin = dimensions[p, 2] - dimensions[p, 1]
-                    buffer = dimensions[p, 2]
-                    dimensions[p, 2] -= margin * decrease
+                    margin = spvol.hi[p] - spvol.lo[p]
+                    buffer = spvol.hi[p]
+                    spvol.hi[p] -= margin * decrease
 
-                    PtsIncrease = cube.Points
-                    newcube = ResizeHyperrectangle(DataTree, p, cube, dimensions)
+                    PtsIncrease = vol.pointcloud.points
+                    newvol = resize_integrationvol(datatree, p, vol, spvol, false)
 
-                    PtsIncrease = newcube.Points / PtsIncrease
+                    PtsIncrease = newvol.pointcloud.points / PtsIncrease
 
                     if PtsIncrease > (1 - decrease / ptsTolDec)
-                        cube = newcube
+                        vol = newvol
                         wasCubeChanged = true
                         change = true
                         change2 = true
-                        LogLow("\tTEST lo p=$p Hyperrectangle Points:\t" * string(cube.Points) * "\tVolume:\t" * string(cube.Volume) * "\tProb. Factor:\t" * string(cube.ProbFactor))
+                        LogLow("\tTEST up p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
                     else
                         #revert changes
-                        dimensions[p, 2] = buffer
+                        spvol.hi[p] = buffer
                     end
                 end
             end
@@ -386,18 +391,18 @@ function CreateHyperrectangle(Mode::Array{Float64, 1}, DataTree::Tree, Rectangle
 
     end
 
-    LogLow("TEST Hyperrectangle Points:\t" * string(cube.Points) * "\tVolume:\t" * string(cube.Volume) * "\tProb. Factor:\t" * string(cube.ProbFactor))
+    LogLow("TEST Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
 
-    res = Search(DataTree, cube.Cube, true)
-    cube.PointIDs = res.PointIDs
-    cube.MaxLogProb = res.MaxLogProb
-    cube.MinLogProb = res.MinLogProb
-    cube.ProbFactor = exp(cube.MaxLogProb - cube.MinLogProb)
+    res = search(datatree, vol.spatialvolume, true)
+    vol.pointcloud.pointIDs = res.pointIDs
+    vol.pointcloud.maxLogProb = res.maxLogProb
+    vol.pointcloud.minLogProb = res.minLogProb
+    vol.pointcloud.probfactor = exp(vol.pointcloud.maxLogProb - vol.pointcloud.minLogProb)
 
-    return cube
+    return vol
 end
 
-@inline function AdjustStepSize(Step, Increase::Bool)
+@inline function adjuststepsize!(Step, Increase::Bool)
     if Increase
         return Step * 0.5
     else
@@ -405,85 +410,82 @@ end
     end
 end
 
-@inline function CalculateOverlapping(Rectangle::Hyperrectangle, Other::Array{Float64, 2})
-    P = size(Other)[1]
-
+@inline function calculate_overlapping(intvol::IntegrationVolume, other::HyperRectVolume)
     innerVol = 1.0
+    rect = intvol.spatialvolume
 
-    for p = 1:P
-        if Rectangle.Cube[p, 1] > Other[p, 2] || Rectangle.Cube[p, 2] < Other[p, 1]
+    for p = 1:ndims(rect)
+        if rect.lo[p] > other.hi[p] || rect.hi[p] < other.lo[p]
             return 0.0
         end
-        if Rectangle.Cube[p, 1] > Other[p, 1] && Rectangle.Cube[p, 2] < Other[p, 2]
-            innerVol *= Rectangle.Cube[p, 2] - Rectangle.Cube[p, 1]
+        if rect.lo[p] > other.lo[p] && rect.hi[p] < other.hi[p]
+            innerVol *= rect.hi[p] - rect.lo[p]
         else
-            innerVol *= min(abs(Rectangle.Cube[p, 1] - Other[p, 2]), abs(Rectangle.Cube[p, 2] - Other[p, 1]))
+            innerVol *= min(abs(rect.lo[p] - other.hi[p]), abs(rect.hi[p] - other.lo[p]))
         end
     end
 
-    return innerVol / Rectangle.Volume
+    return innerVol / intvol.volume
 end
 
-function IntegrateHyperrectangle(LogProb::Array{Float64, 1}, Weights::Array{Float64, 1}, Rectangle::Hyperrectangle, Determinant::Float64)::IntermediateResult
+function integrate_hyperrectangle_noerror(dataset::DataSet, integrationvol::IntegrationVolume, determinant::Float64)::IntermediateResult
     s = 0.0
-    count = 0
-    for i in Rectangle.PointIDs
+    count = 0.0
+    for i in integrationvol.pointcloud.pointIDs
         #for numerical sot tability
-        prob = (LogProb[i] - Rectangle.MaxLogProb)
-        s += 1.0 / exp(prob) * Weights[i]
-        count += round(Weights[i])
+        prob = (dataset.logprob[i] - integrationvol.pointcloud.maxLogProb)
+        s += 1.0 / exp(prob) * dataset.weights[i]
+        count += dataset.weights[i]
     end
 
-    I = sum(Weights) * Rectangle.Volume / s / Determinant / exp(-Rectangle.MaxLogProb)
+    I = sum(dataset.weights) * integrationvol.volume / s / determinant / exp(-integrationvol.pointcloud.maxLogProb)
 
-    LogLow("\tVolume\t" * string(Rectangle.Volume) * "\tIntegral: "* string(I) * "\tPoints:\t" * string(count))
+    LogLow("\tVolume:\t$(integrationvol.volume)\tIntegral: $I\tPoints:\t$(count)")
 
-    return IntermediateResult(I, 0.0, Float64(Rectangle.Points), Rectangle.Volume)
+    return IntermediateResult(I, 0.0, Float64(integrationvol.pointcloud.points), integrationvol.volume)
 end
 
-function IntegrateHyperrectangleWithError(DataTree::Tree, LogProb::Array{Float64, 1}, Weights::Array{Float64, 1}, Rectangle::Hyperrectangle, Determinant::Float64)::IntermediateResult
-    P = DataTree.P
-
+function integrate_hyperrectangle(datatree::Tree, dataset::DataSet, integrationvol::IntegrationVolume, determinant::Float64)::IntermediateResult
     nIntegrals = 13
 
     Results = Array{IntermediateResult, 1}(nIntegrals)
 
     for i = 1:nIntegrals
-        newdimensions = deepcopy(Rectangle.Cube)
-        volfactor = (i - 5) * 0.5 * 0.05 + 1#up to 20% decrease and increase
-        volfactor = volfactor^(1.0/P)
+        newvol = deepcopy(integrationvol.spatialvolume)
+        volfactor = (i - 5) * 0.5 * 0.025 + 1#up to 10% decrease and 20% increase
+        volfactor = volfactor^(1.0/dataset.P)
         volfactor -= 1.0
-        for p = 1:P
-            margin = newdimensions[p, 2] - newdimensions[p, 1]
-            newdimensions[p, 1] += margin * 0.5 * volfactor
-            newdimensions[p, 2] -= margin * 0.5 * volfactor
+        for p = 1:dataset.P
+            margin = newvol.hi[p] - newvol.lo[p]
+            newvol.lo[p] += margin * 0.5 * volfactor
+            newvol.hi[p] -= margin * 0.5 * volfactor
         end
-        Rectangle = Hyperrectangle(DataTree, newdimensions, true)
+        newintvol = IntegrationVolume(datatree, newvol, true)
 
-        Results[i] = IntegrateHyperrectangle(LogProb, Weights, Rectangle, Determinant)
+        Results[i] = integrate_hyperrectangle_noerror(dataset, newintvol, determinant)
     end
 
 
     I = 0.0
     count = 0.0
     for i = 1:nIntegrals
-        I += Results[i].Integral / nIntegrals
-        count += Results[i].Points / nIntegrals
+        I += Results[i].integral / nIntegrals
+        count += Results[i].points / nIntegrals
     end
 
     error = 0.0
     for i = 1:nIntegrals
-        error += (Results[i].Integral - I) ^ 2
+        error += (Results[i].integral - I) ^ 2
     end
     error = sqrt(error / (nIntegrals - 1))
 
     if isnan(I) || I == Inf || I == -Inf
-        res = IntegrateHyperrectangle(LogProb, Weights, Rectangle, Determinant)
-        return IntermediateResult(res.Integral, 0.0, res.Points, Rectangle.Volume)
-        LogMedium("No error could be calculated for IntegrateHyperrectangleWithError()")
+        res = integrate_hyperrectangle_noerror(dataset, integrationvol, determinant)
+        LogMedium("No error could be calculated for integrate_hyperrectangle()")
+        return IntermediateResult(res.integral, 0.0, res.points, integrationvol.volume)
     end
 
-    return IntermediateResult(I, error, count, Rectangle.Volume)
+    return IntermediateResult(I, error, count, integrationvol.volume)
 end
 
 

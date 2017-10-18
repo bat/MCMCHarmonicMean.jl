@@ -1,8 +1,9 @@
+# This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
-mutable struct Tree
-    SortedData::Matrix{Float64}
-    SortedLogProb::Vector{Float64}
+mutable struct Tree{T<:Real}
+    SortedData::Matrix{T}
+    SortedLogProb::Vector{T}
     SortedIDs::Vector{Int64}
 
     Cuts::Int64
@@ -10,37 +11,37 @@ mutable struct Tree
 
     DimensionList::Vector{Int64}
     RecursionDepth::Int64
-    CutList::Vector{Float64}
+    CutList::Vector{T}
     N::Int64
     P::Int64
 end
 
-function CreateSearchTree(Data::DataSet, MinCuts::Integer = 8, MaxLeafsize::Integer = 200)::Tree
-    println("Create Search Tree")
-    newData = deepcopy(Data.Data)
-    newLogProb = deepcopy(Data.LogProb)
-    ids = [i for i = 1:Data.N]
+function create_search_tree(dataset::DataSet, MinCuts::Integer = 8, MaxLeafsize::Integer = 200)::Tree
+    LogMedium("Create Search Tree")
+    newData = deepcopy(dataset.data)
+    newLogProb = deepcopy(dataset.logprob)
+    ids = [i for i = 1:dataset.N]
 
-    suggCuts = (Data.N / MaxLeafsize)^(1.0 / Data.P)
+    suggCuts = (dataset.N / MaxLeafsize)^(1.0 / dataset.P)
     Cuts = ceil(Int64, max(MinCuts, suggCuts))
 
-    recDepth = ceil(Int64, log(Data.N / MaxLeafsize) / log(Cuts))
+    recDepth = ceil(Int64, log(dataset.N / MaxLeafsize) / log(Cuts))
 
     #define dimension list
     local DimensionList::Vector{Int64}
     if Cuts > MinCuts
-        DimensionList=[i for i=1:Data.P]
+        DimensionList=[i for i=1:dataset.P]
     else
         DimensionList = [i for i=1:recDepth]
     end
 
-    Leafsize = ceil(Int64, Data.N / Cuts^recDepth)
-    println("Cuts $Cuts\tLeafsize $Leafsize\tRec. Depth $recDepth")
+    Leafsize = ceil(Int64, dataset.N / Cuts^recDepth)
+    LogMedium("Cuts $Cuts\tLeafsize $Leafsize\tRec. Depth $recDepth")
     CutList = Vector{Float64}(0)
 
     createSearchTree(newData, newLogProb, ids, DimensionList, CutList, Cuts, Leafsize, 1)
 
-    return Tree(newData, newLogProb, ids, Cuts, Leafsize, DimensionList, length(DimensionList), CutList, Data.N, Data.P)
+    return Tree(newData, newLogProb, ids, Cuts, Leafsize, DimensionList, length(DimensionList), CutList, dataset.N, dataset.P)
 end
 
 function createSearchTree{T}(Data::Matrix{T}, LogProb::Vector{T}, IDs::Vector{Int64}, DimensionList::Vector{Int64}, CutList::Vector{Float64},
@@ -88,7 +89,7 @@ function createSearchTree{T}(Data::Matrix{T}, LogProb::Vector{T}, IDs::Vector{In
     end
 end
 
-function Search(DataTree::Tree, Volume::Matrix{Float64}, SearchPoints::Bool = false)::SearchResult
+function search(datatree::Tree, searchvol::HyperRectVolume, SearchPoints::Bool = false)::SearchResult
     points = 0
     pointIDs = Vector{Int64}()
     maxprob = -Inf
@@ -98,8 +99,8 @@ function Search(DataTree::Tree, Volume::Matrix{Float64}, SearchPoints::Bool = fa
     currentDimension = 0
     treePos = Vector{Int64}()
 
-    maxRecursion = DataTree.RecursionDepth
-    maxI = length(DataTree.CutList)
+    maxRecursion = datatree.RecursionDepth
+    maxI = length(datatree.CutList)
 
     i = 1
     while i <= maxI
@@ -112,26 +113,26 @@ function Search(DataTree::Tree, Volume::Matrix{Float64}, SearchPoints::Bool = fa
         else
             treePos[currentRecursion] += 1
         end
-        while treePos[currentRecursion] > DataTree.Cuts
+        while treePos[currentRecursion] > datatree.Cuts
             deleteat!(treePos, currentRecursion)
             currentRecursion -= 1
             treePos[currentRecursion] += 1
         end
-        currentDimension = DataTree.DimensionList[currentRecursion]
+        currentDimension = datatree.DimensionList[currentRecursion]
 
 
         diff = 1
         for r = 1:(maxRecursion - currentRecursion)
-            diff += DataTree.Cuts^r
+            diff += datatree.Cuts^r
         end
-        low = DataTree.CutList[i]
-        high = i + diff > maxI ? DataTree.CutList[end] : DataTree.CutList[i+diff]
-        if treePos[currentDimension] == DataTree.Cuts
+        low = datatree.CutList[i]
+        high = i + diff > maxI ? datatree.CutList[end] : datatree.CutList[i+diff]
+        if treePos[currentDimension] == datatree.Cuts
             high = Inf
         end
 
 
-        if Volume[currentDimension, 1] > high || Volume[currentDimension, 2] < low
+        if searchvol.lo[currentDimension] > high || searchvol.hi[currentDimension] < low
             #skip this interval
             i+=diff
             if currentDimension < maxRecursion
@@ -142,14 +143,14 @@ function Search(DataTree::Tree, Volume::Matrix{Float64}, SearchPoints::Bool = fa
 
         #if on deepest recursion check for points
         if currentRecursion == maxRecursion
-            startID, stopID = getDataPositions(DataTree, treePos)
+            startID, stopID = getDataPositions(datatree, treePos)
 
-            res = searchInterval(DataTree, Volume, startID, stopID, SearchPoints)
-            points += res.Points
-            maxprob = res.MaxLogProb > maxprob ? res.MaxLogProb : maxprob
-            minprob = res.MinLogProb < minprob ? res.MinLogProb : minprob
+            res = searchInterval(datatree, searchvol, startID, stopID, SearchPoints)
+            points += res.points
+            maxprob = res.maxLogProb > maxprob ? res.maxLogProb : maxprob
+            minprob = res.minLogProb < minprob ? res.minLogProb : minprob
             if SearchPoints
-                append!(pointIDs, res.PointIDs)
+                append!(pointIDs, res.pointIDs)
             end
         end
         i += 1
@@ -158,38 +159,38 @@ function Search(DataTree::Tree, Volume::Matrix{Float64}, SearchPoints::Bool = fa
     return SearchResult(pointIDs, points, maxprob, minprob)
 end
 
-@inline function getDataPositions(DataTree::Tree, TreePos::Vector{Int64})
-    maxRecursion = DataTree.RecursionDepth
+@inline function getDataPositions(datatree::Tree, TreePos::Vector{Int64})
+    maxRecursion = datatree.RecursionDepth
     startID = 1
     recCntr = maxRecursion
     for t in TreePos
         recCntr -= 1
-        startID += DataTree.Leafsize * DataTree.Cuts^recCntr * (t-1)
+        startID += datatree.Leafsize * datatree.Cuts^recCntr * (t-1)
     end
-    stopID = startID + DataTree.Leafsize - 1
-    if stopID > DataTree.N
-        stopID = DataTree.N
+    stopID = startID + datatree.Leafsize - 1
+    if stopID > datatree.N
+        stopID = datatree.N
     end
 
     return startID, stopID
 end
 
 
-function searchInterval(DataTree::Tree, Volume::Matrix{Float64}, start::Int64, stop::Int64, SearchPoints::Bool)::SearchResult
+function searchInterval(datatree::Tree, searchvol::HyperRectVolume, start::Int64, stop::Int64, SearchPoints::Bool)::SearchResult
     points = 0
     pointIDs = Vector{Int64}(0)
     maxprob = -Inf
     minprob = Inf
 
-    dimsort = DataTree.DimensionList[DataTree.RecursionDepth]
+    dimsort = datatree.DimensionList[datatree.RecursionDepth]
 
     for i = start:stop
-        if DataTree.SortedData[dimsort, i] > Volume[dimsort, 2]
+        if datatree.SortedData[dimsort, i] > searchvol.hi[dimsort]
             break
         end
         inVol = true
-        for p = 1:DataTree.P
-            if DataTree.SortedData[p, i] < Volume[p, 1] || DataTree.SortedData[p, i] > Volume[p, 2]
+        for p = 1:datatree.P
+            if datatree.SortedData[p, i] < searchvol.lo[p] || datatree.SortedData[p, i] > searchvol.hi[p]
                 inVol = false
                 break
             end
@@ -199,9 +200,9 @@ function searchInterval(DataTree::Tree, Volume::Matrix{Float64}, start::Int64, s
             points += 1
 
             if SearchPoints
-                push!(pointIDs, DataTree.SortedIDs[i])
+                push!(pointIDs, datatree.SortedIDs[i])
             end
-            prob = DataTree.SortedLogProb[i]
+            prob = datatree.SortedLogProb[i]
             maxprob = prob > maxprob ? prob : maxprob
             minprob = prob < minprob ? prob : minprob
         end

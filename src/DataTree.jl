@@ -1,25 +1,26 @@
-#using Base.Threads
+# This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
-struct TreeNode
-    Cuts::Array{Float64, 1}
+
+struct TreeNode{T<:Real}
+    Cuts::Vector{T}
     Dimension::Int64
 
-    SubNodes::Array{TreeNode, 1}
+    SubNodes::Array{TreeNode{T}, 1}
     IsEndPoint::Bool
 
-    Positions::Array{Float64, 2}
-    LogProb::Array{Float64, 1}
+    Positions::Matrix{T}
+    LogProb::Vector{T}
     PointIDs::Array{Int64, 1}
     Points::Int64
 end
 
-struct Tree
+struct Tree{T<:Real}
     DimensionList::Vector{Int64}
     Cuts::Int64
 
     Leafsize::Int64
-    StartingNode::TreeNode
+    StartingNode::TreeNode{T}
     N::Int64
     P::Int64
 end
@@ -30,7 +31,7 @@ end
 
 Creates a Search Tree
 """
-function CreateSearchTree(Data::DataSet, MinCuts::Integer = 8, MaxLeafsize::Integer = 200)::Tree
+function create_search_tree(Data::DataSet, MinCuts::Integer = 8, MaxLeafsize::Integer = 200)::Tree
     #find number of cuts per dimension
     suggCuts = (Data.N / MaxLeafsize)^(1.0 / Data.P)
     Cuts = round(Int64, max(MinCuts, suggCuts))
@@ -44,7 +45,7 @@ function CreateSearchTree(Data::DataSet, MinCuts::Integer = 8, MaxLeafsize::Inte
         DimensionList=[i for i=1:Data.P]
     end
 
-    endpoints = divideDimension(DimensionList[1], Data.Data, Data.LogProb, [i for i=1:Data.N], Cuts)
+    endpoints = divide_dimension(DimensionList[1], Data.Data, Data.LogProb, [i for i=1:Data.N], Cuts)
     nodes = Array{TreeNode, 1}(Cuts)
 
 
@@ -69,7 +70,7 @@ function createTree{T}(Data::Matrix{T}, LogProb::Vector{T}, PointIDs::Vector{Int
     N = size(Data)[2]
 
     subData = Data[:, PointIDs]
-    endpoints = divideDimension(DimensionList[1], subData, LogProb[PointIDs], PointIDs, Cuts)
+    endpoints = divide_dimension(DimensionList[1], subData, LogProb[PointIDs], PointIDs, Cuts)
 
     cutx = Array{Float64, 1}(Cuts + 1)
     cutx[1] = endpoints[1].Positions[DimensionList[1], 1]
@@ -87,7 +88,7 @@ function createTree{T}(Data::Matrix{T}, LogProb::Vector{T}, PointIDs::Vector{Int
     return TreeNode(cutx, DimensionList[1], endpoints, false, Array{Float64, 2}(0, 0), Array{Float64, 1}(0), Array{Int64, 1}(0), 0)
 end
 
-function divideDimension(Dim::Int64, DataSubSet::Array{Float64, 2}, LogProb::Array{Float64, 1}, PointIDs::Array{Int64, 1}, Cuts::Int64)
+function divide_dimension(Dim::Int64, DataSubSet::Array{Float64, 2}, LogProb::Array{Float64, 1}, PointIDs::Array{Int64, 1}, Cuts::Int64)
     N = length(PointIDs)
 
     sortIdx = sortperm(DataSubSet[Dim, :])
@@ -112,7 +113,7 @@ function divideDimension(Dim::Int64, DataSubSet::Array{Float64, 2}, LogProb::Arr
     return intervals
 end
 
-function Search(DataTree::Tree, Volume::Array{Float64, 2}, SearchPoints::Bool = false)::SearchResult
+function search(DataTree::Tree, Volume::Array{Float64, 2}, SearchPoints::Bool = false)::SearchResult
     #global c = 0
     res = searchDim(DataTree.StartingNode, Volume, SearchPoints)
     #LogMedium("Search count: $c")

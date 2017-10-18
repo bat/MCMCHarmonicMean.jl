@@ -1,19 +1,22 @@
+# This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
-export LoadMCMCData
+export load_mcmc_data
 
-function LoadMCMCData(path::String, params::Array{String}, range = Colon(), modelname::String = "", dataFormat::DataType = Float64)::DataSet
+function load_mcmc_data(path::String, params::Array{String}, range = Colon(), treename::String = "", dataFormat::DataType = Float64)::DataSet
     ending = split(path, ".")[end]
     local res::DataSet
 
     if ending == "h5"
-        @time res = loadHDF5(dataFormat, path, params, range)
+        res = loadhdf5(dataFormat, path, params, range)
+    elseif ending == "root"
+        println("ROOT support disabled. use root_interface.jl for conversion to HDF5")
     else
-        error("File Ending not known. Use *.h5 files")
+        println("File ending not supported. Use *.root or *.h5")
     end
     return res
 end
 
-function loadHDF5(T::DataType, path::String, params::Array{String}, range)::DataSet
+function loadhdf5(T::DataType, path::String, params::Array{String}, range)::DataSet
     file = h5open(path, "r")
 
     data_1st = file[params[1]][range]
@@ -69,9 +72,4 @@ function loadHDF5(T::DataType, path::String, params::Array{String}, range)::Data
     result = DataSet{T}(newData, newLogProb, newWeights, N - removedPoints, P)
 
     return result
-end
-
-
-function root2hdf5(T::DataType, path::String, params::Array{String}, range, modelname::String)
-    error("ROOT support not enabled")
 end

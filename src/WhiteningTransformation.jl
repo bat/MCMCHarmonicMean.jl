@@ -1,41 +1,39 @@
-
-
-export CholeskyWhitening, StatisticalWhitening
+# This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
 
-function CholeskyWhitening(Data::DataSet)::WhiteningResult
-    data_mean = zeros(Data.P)
+function cholesky_whitening(dataset::DataSet)::WhiteningResult
+    datamean = zeros(dataset.P)
 
-    for p in eachindex(data_mean)
-        data_mean[p] = mean(view(Data.Data, p, :))
+    for p in eachindex(datamean)
+        datamean[p] = mean(view(dataset.data, p, :))
     end
 
-    for n in 1:Data.N
-        buffer = view(Data.Data, :, n) - data_mean[:]
-        setindex!(Data.Data, buffer, :, n)
+    for n in 1:dataset.N
+        buffer = view(dataset.data, :, n) - datamean[:]
+        setindex!(dataset.data, buffer, :, n)
     end
 
-    covmatrix = cov(transpose(Data.Data), FrequencyWeights(Data.Weights), corrected=true)
+    covmatrix = cov(transpose(dataset.data), FrequencyWeights(dataset.weights), corrected=true)
     covmatrix_inv = inv(Symmetric(covmatrix))
     w = chol(covmatrix_inv)
     wres = convert(Array{Float64, 2}, w)
 
-    return TransformData(Data, wres, data_mean)
+    return transform_data(dataset, wres, datamean)
 end
 
-function StatisticalWhitening(Data::DataSet)::WhiteningResult
-    data_mean = zeros(Data.P)
+function statistical_whitening(dataset::DataSet)::WhiteningResult
+    datamean = zeros(dataset.P)
 
-    for p in eachindex(data_mean)
-        data_mean[p] = mean(view(Data.Data, p, :))
+    for p in eachindex(datamean)
+        datamean[p] = mean(view(dataset.data, p, :))
     end
 
-    for n in 1:Data.N
-        Data.Data[:, n] -= data_mean
+    for n in 1:dataset.N
+        dataset.data[:, n] -= datamean
     end
 
-    covmatrix = cov(transpose(Data.Data), FrequencyWeights(Data.Weights), corrected=true)
+    covmatrix = cov(transpose(dataset.data), FrequencyWeights(dataset.weights), corrected=true)
 
     E = eigfact(covmatrix).vectors
     w_d = transpose(E)
@@ -43,36 +41,36 @@ function StatisticalWhitening(Data::DataSet)::WhiteningResult
     w = inv(full(sqrt.(D))) * w_d
     wres = convert(Array{Float64, 2}, w)
 
-    return TransformData(Data, wres, data_mean)
+    return transform_data(dataset, wres, datamean)
 end
 
-function TransformData{T<:AbstractFloat}(Data::DataSet{T}, W::Matrix{T}, Data_Mean::Vector{T})::WhiteningResult
-    buffer = Vector{T}(Data.P)
+function transform_data{T<:AbstractFloat}(dataset::DataSet{T}, W::Matrix{T}, datamean::Vector{T})::WhiteningResult
+    buffer = Vector{T}(dataset.P)
 
-    Data.Data = W * Data.Data
+    dataset.data = W * dataset.data
 
-    sortedLogProb = sortperm(Data.LogProb, rev = true)
+    sortedLogProb = sortperm(dataset.logprob, rev = true)
     determinant = abs(det(W))
 
-    box = Matrix{Float64}(Data.P, 2)
-    box[:, 1] = Data.Data[:, sortedLogProb[1]]
-    box[:, 2] = Data.Data[:, sortedLogProb[1]]
+    box = Matrix{Float64}(dataset.P, 2)
+    box[:, 1] = dataset.data[:, sortedLogProb[1]]
+    box[:, 2] = dataset.data[:, sortedLogProb[1]]
 
-    for n in sortedLogProb[2:floor(Int64, Data.N * 0.50)]
-        for p in 1:Data.P
-            if Data.Data[p,n] > box[p, 2]
-                box[p, 2] = Data.Data[p,n]
-            elseif Data.Data[p,n] < box[p, 1]
-                box[p, 1] = Data.Data[p,n]
+    for n in sortedLogProb[2:floor(Int64, dataset.N * 0.50)]
+        for p in 1:dataset.P
+            if dataset.data[p,n] > box[p, 2]
+                box[p, 2] = dataset.data[p,n]
+            elseif dataset.data[p,n] < box[p, 1]
+                box[p, 1] = dataset.data[p,n]
             end
         end
     end
 
     LogMedium("Calculate Optimal Target Probability")
-    maxP = Data.LogProb[sortedLogProb[1]]
-    minP = Data.LogProb[sortedLogProb[Data.N]]
+    maxP = dataset.logprob[sortedLogProb[1]]
+    minP = dataset.logprob[sortedLogProb[dataset.N]]
 
-    suggTargetProb = Data.LogProb[sortedLogProb[floor(Int64, Data.N * 0.8)]]
+    suggTargetProb = dataset.logprob[sortedLogProb[floor(Int64, dataset.N * 0.8)]]
     suggTargetProb = exp(maxP - suggTargetProb)
     #suggTargetProb = min(100, exp(maxP - suggTargetProb))
 
@@ -80,5 +78,5 @@ function TransformData{T<:AbstractFloat}(Data::DataSet{T}, W::Matrix{T}, Data_Me
     LogMedium("Suggested Target Probability Factor:\t" * string(suggTargetProb))
     LogMedium("Maximum Probability Factor:\t" * string(exp(maxP - minP)))
 
-    return WhiteningResult(determinant, box, maxP-minP, suggTargetProb, W, Data_Mean)
+    return WhiteningResult(determinant, box, maxP-minP, suggTargetProb, W, datamean)
 end
