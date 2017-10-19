@@ -1,14 +1,14 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 """
-    Integrate(Data::DataSet)::IntegrationResult
+    hm_integrate(Data::DataSet, settings::HMIntegrationSettings = HMIntegrationSettings())::IntegrationResult
 
 This function starts the Harmonic Mean Integration. It needs a data set as input (see DataSet documentation). When loading data from a
 file (either HDF5 or ROOT) the function
 function LoadMCMCData(path::String, params::Array{String}, range = Colon(), modelname::String = "", dataFormat::DataType = Float64)::DataSet()
 can be used.
 """
-function integrate(dataset::DataSet)::IntegrationResult
+function hm_integrate(dataset::DataSet, settings::HMIntegrationSettings = HMIntegrationStandardSettings())::IntegrationResult
     if dataset.N < dataset.P * 50
         error("Not enough points for integration")
     end
@@ -16,13 +16,21 @@ function integrate(dataset::DataSet)::IntegrationResult
     LogHigh("Integration started. Data Points:\t$(dataset.N)\tParameters:\t$(dataset.P)")
     LogHigh("Data Whitening")
 
-    whiteningresult = cholesky_whitening(dataset)
-    #whiteningresult = statistical_whitening(dataset)
+    local whiteningresult::WhiteningResult
+    if settings.whitening_method == :CholeskyWhitening
+        whiteningresult = cholesky_whitening(dataset)
+    elseif settings.whitening_method == :StatisticalWhitening
+        whiteningresult = statistical_whitening(dataset)
+    elseif settings.whitening_method == :NoWhitening
+        whiteningresult = no_whitening(dataset)
+    else
+        error("Unknown whitening method. Use :CholeskyWhitening or :StatisticalWhitening")
+    end
 
     datatree = create_search_tree(dataset)
 
     LogHigh("Find possible Hyperrectangle Centers")
-    centerIDs = find_hypercube_centers(dataset, datatree, whiteningresult)
+    centerIDs = find_hypercube_centers(dataset, datatree, whiteningresult, settings)
     volumes = Vector{IntegrationVolume}(0)
 
     LogHigh("Find good tolerances for Hyperrectangle Creation")
@@ -67,6 +75,7 @@ function integrate(dataset::DataSet)::IntegrationResult
 
     LogHigh("Create Hyperrectangles")
     maxPoints = 0
+    totalpoints = 0
 
 
     @showprogress for i in centerIDs
@@ -84,17 +93,21 @@ function integrate(dataset::DataSet)::IntegrationResult
         end
         iterations += 1
 
-        vol = create_hyperrectangle(dataset.data[:, i], datatree, volumes, whiteningresult, suggTol)
+        vol = create_hyperrectangle(dataset.data[:, i], datatree, volumes, whiteningresult, suggTol, settings)
 
 
         isRectInsideAnother = false
-        for other in volumes
-            overlap = calculate_overlapping(vol, other.spatialvolume)
-            if overlap > 0.5
-                isRectInsideAnother = true
-                break
+
+        if !settings.use_all_rects
+            for other in volumes
+                overlap = calculate_overlapping(vol, other.spatialvolume)
+                if overlap > 0.75
+                    isRectInsideAnother = true
+                    break
+                end
             end
         end
+
         if isRectInsideAnother
             iterations_skipped += 1
             LogLow("Hyperrectangle (ID = $i) discarded because it was inside another Rectangle.")
@@ -102,6 +115,7 @@ function integrate(dataset::DataSet)::IntegrationResult
             LogLow("Hyperrectangle (ID = $i ) discarded because it has not enough Points.\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
         else
             push!(volumes, vol)
+            totalpoints += vol.pointcloud.points
 
 
             LogMedium("$(length(volumes)). Hyperrectangle (ID = $i ) found. Rectangles discarded: $iterations_skipped\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
@@ -110,7 +124,10 @@ function integrate(dataset::DataSet)::IntegrationResult
             end
         end
 
-
+        if settings.stop_ifenoughpoints && totalpoints > 0.5 * dataset.N
+            LogMedium("hyper-rectangle creation process stopped because the created hyper-rectangles have already enough points")
+            break
+        end
     end
 
 
@@ -144,16 +161,31 @@ function integrate(dataset::DataSet)::IntegrationResult
     end
     nRes = length(IntResults)
 
+    rectweights = ones(nRes)
+    rectnorm = nRes
+
+    if settings.use_all_rects
+        pweights = create_pointweights(dataset, [volumes[i].pointcloud for i in eachindex(volumes)])
+        for i in eachindex(volumes)
+            cloud = volumes[i]
+            rweight = 0.0
+            for p in cloud.pointcloud.pointIDs
+                rweight += 1.0 / pweights[p]
+            end
+            rectweights[i] = rweight
+        end
+        rectnorm = sum(rectweights)
+    end
+
     result = 0.0
     error = 0.0
     points = 0.0
     volume = 0.0
     #normerror = 0.0
     for i = 1:nRes
-        result += IntResults[i].integral / nRes#(IntResults[i].Error / IntResults[i].Integral)
-        #normerror += 1 / (IntResults[i].Error / IntResults[i].Integral)
-        points += IntResults[i].points / nRes
-        volume += IntResults[i].volume / nRes
+        result += IntResults[i].integral * rectweights[i] / rectnorm
+        points += IntResults[i].points * rectweights[i] / rectnorm
+        volume += IntResults[i].volume * rectweights[i] / rectnorm
     end
     #result /= normerror
     for i in 1:nRes
@@ -164,11 +196,11 @@ function integrate(dataset::DataSet)::IntegrationResult
         error = IntResults[1].error
     end
 
-    LogHigh("Integration Result:\t $result +- $error\tRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume")
+    LogHigh("Integration Result:\t $result +- $error\nRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume")
     return IntegrationResult(result, error, nRes, points, volume, volumes, centerIDs, whiteningresult)
 end
 
-#=
+
 """
     function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volumes::Vector{IntegrationVolume}, whiteningresult::WhiteningResult, Tolerance::Float64)::IntegrationVolume
 
@@ -176,8 +208,10 @@ This function tries to create a hyper-rectangle around a starting point. It buil
 If the creation process fails a rectangle with no or only one point might be returned (check probfactor). The creation process might also be stopped because the rectangle overlaps
 with another.
 """
-=#
-function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volumes::Vector{IntegrationVolume}, whiteningresult::WhiteningResult, Tolerance::Float64)::IntegrationVolume
+
+function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volumes::Vector{IntegrationVolume}, whiteningresult::WhiteningResult,
+        Tolerance::Float64, settings::HMIntegrationSettings)::IntegrationVolume
+
     edgelength = 1.0
 
     cube = HyperCubeVolume(Mode, edgelength)
@@ -270,7 +304,7 @@ function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volu
     spvol = deepcopy(vol.spatialvolume)
     buffer = 0.0
 
-    increase = 0.1
+    increase = settings.rect_increase
     decrease = 1.0 - 1.0 / (1.0 + increase)
 
     while wasCubeChanged && vol.pointcloud.probfactor > 1.0
@@ -278,12 +312,16 @@ function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volu
         wasCubeChanged = false
 
         isRectInsideAnother = false
-        for other in volumes
-            if calculate_overlapping(vol, other.spatialvolume) > 0.5
-                isRectInsideAnother = true
-                break
+
+        if settings.use_all_rects
+            for other in volumes
+                if calculate_overlapping(vol, other.spatialvolume) > 0.75
+                    isRectInsideAnother = true
+                    break
+                end
             end
         end
+
         if isRectInsideAnother
             return vol
         end
@@ -432,7 +470,7 @@ function integrate_hyperrectangle_noerror(dataset::DataSet, integrationvol::Inte
     s = 0.0
     count = 0.0
     for i in integrationvol.pointcloud.pointIDs
-        #for numerical sot tability
+        #for numerical stability
         prob = (dataset.logprob[i] - integrationvol.pointcloud.maxLogProb)
         s += 1.0 / exp(prob) * dataset.weights[i]
         count += dataset.weights[i]
@@ -486,17 +524,4 @@ function integrate_hyperrectangle(datatree::Tree, dataset::DataSet, integrationv
     end
 
     return IntermediateResult(I, error, count, integrationvol.volume)
-end
-
-
-function CPUtime_ms()
-    rusage = Libc.malloc(4*sizeof(Clong) + 14*sizeof(UInt64))
-    ccall(:uv_getrusage, Cint, (Ptr{Void},), rusage)
-    utime = UInt64(1000000)*unsafe_load(convert(Ptr{Clong}, rusage + 0*sizeof(Clong))) +    # user CPU time
-                                    unsafe_load(convert(Ptr{Clong}, rusage + 1*sizeof(Clong)))
-    stime = UInt64(1000000)*unsafe_load(convert(Ptr{Clong}, rusage + 2*sizeof(Clong))) +    # system CPU time
-                                    unsafe_load(convert(Ptr{Clong}, rusage + 3*sizeof(Clong)))
-    ttime = utime + stime  # total CPU time
-    Libc.free(rusage)
-    return ttime
 end

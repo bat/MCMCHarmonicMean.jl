@@ -1,5 +1,14 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
+function no_whitening(dataset::DataSet)::WhiteningResult
+    datamean = zeros(dataset.P)
+
+    for p in eachindex(datamean)
+        datamean[p] = mean(view(dataset.data, p, :))
+    end
+
+    return transform_data(dataset, eye(dataset.P), datamean)
+end
 
 
 function cholesky_whitening(dataset::DataSet)::WhiteningResult
@@ -45,12 +54,19 @@ function statistical_whitening(dataset::DataSet)::WhiteningResult
 end
 
 function transform_data{T<:AbstractFloat}(dataset::DataSet{T}, W::Matrix{T}, datamean::Vector{T})::WhiteningResult
-    buffer = Vector{T}(dataset.P)
+    local determinant::Float64
 
-    dataset.data = W * dataset.data
+    if W == eye(dataset.P)
+        determinant = 1.0
+    else
+        buffer = Vector{T}(dataset.P)
+
+        dataset.data = W * dataset.data
+
+        determinant = abs(det(W))
+    end
 
     sortedLogProb = sortperm(dataset.logprob, rev = true)
-    determinant = abs(det(W))
 
     box = Matrix{Float64}(dataset.P, 2)
     box[:, 1] = dataset.data[:, sortedLogProb[1]]

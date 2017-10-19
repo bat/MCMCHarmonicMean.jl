@@ -15,3 +15,16 @@ function PointCloud(datatree::Tree, hyperrect::HyperRectVolume, searchpts::Bool 
 
     return PointCloud(maxProb, minProb, probFactor, points, pointIDs)
 end
+
+
+function create_pointweights{T<:Real}(dataset::DataSet{T}, pointclouds::Vector{PointCloud})::Vector{T}
+    pweights = zeros(dataset.N)
+
+    for cloud in pointclouds
+        for point in cloud.pointIDs
+            pweights[point] += 1
+        end
+    end
+
+    return pweights
+end

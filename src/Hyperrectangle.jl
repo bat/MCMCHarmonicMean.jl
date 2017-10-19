@@ -23,7 +23,7 @@ end
 end
 
 
-function find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresult::WhiteningResult)::Vector{Int64}
+function find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{Int64}
     weight_Prob = 1.0
     weight_Dens = 1.0
     weight_Loca = 10.0
@@ -31,7 +31,7 @@ function find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresul
 
     sortLogProb = sortperm(dataset.logprob, rev = true)
 
-    NMax = ceil(Int64, min(10000, dataset.N * 0.05))
+    NMax = ceil(Int64, min(min(dataset.N, settings.max_startingIDs * 10), dataset.N * min(1.0, 10 * settings.max_startingIDs_fraction)))
 
     ignorePoint = falses(dataset.N)
 
@@ -44,13 +44,12 @@ function find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresul
 
         mode = view(dataset.data, :, n)
 
-        if in(dataset.data[:, n], whiteningresult.boundingbox)
-            weights[n] = weight_Prob * dataset.logprob[n]
+        weights[n] = weight_Prob * dataset.logprob[n]
 
-            cube =  Hypercube(dataset.data[:, n], datatree, testlength, true)
-            for id in cube.PointIDs
-                ignorePoint[id] = true
-            end
+        cubevol =  HyperCubeVolume(dataset.data[:, n], testlength)
+        cube = IntegrationVolume(datatree, cubevol, true)
+        for id in cube.pointcloud.pointIDs
+            ignorePoint[id] = true
         end
     end
 
@@ -64,8 +63,10 @@ function find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresul
         end
     end
     NMax = stop - 1
-    if stop > min(1000, dataset.N * 0.005)
-        NMax = round(Int64, min(1000, dataset.N * 0.005))
+
+    max_startingIDs = min(settings.max_startingIDs, dataset.N * settings.max_startingIDs_fraction)
+    if stop > max_startingIDs
+        NMax = round(Int64, max_startingIDs)
     end
     stop = dataset.logprob[sortIdx[1]] - log(whiteningresult.targetprobfactor)
     for i = 1:NMax
@@ -79,6 +80,7 @@ function find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresul
     if NMax < 10 && stop >= 10
         NMax = 10
     elseif NMax < 10 && stop < 10
+        LogMedium("Returned minimum number of starting points: 10")
         return sortLogProb[1:10]
     end
 

@@ -29,12 +29,15 @@ include("./HarmonicMeanIntegration.jl")
 include("./Log.jl")
 
 
-export DataSet
-export integrate
 
-export IntegrationResult
-export IntegrationVolume
-export PointCloud
+export hm_integrate
+
+export DataSet
+
+export HMIntegrationPrecisionSettings
+export HMIntegrationFastSettings
+export HMIntegrationStandardSettings
+export HMIntegrationSettings
 
 
 end # module

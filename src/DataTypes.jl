@@ -29,7 +29,18 @@ function Base.show(io::IO, data::DataSet)
 end
 
 
-
+struct HMIntegrationSettings
+    whitening_method::Symbol
+    max_startingIDs::Integer
+    max_startingIDs_fraction::AbstractFloat
+    rect_increase::AbstractFloat
+    use_all_rects::Bool
+    stop_ifenoughpoints::Bool
+end
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, false, true )
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, false, false)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, true,  false)
+end
 
 """
     WhiteningResult{T<:Real}
@@ -123,7 +134,7 @@ mutable struct IntegrationVolume
     volume::Float64
 end
 function Base.show(io::IO, vol::IntegrationVolume)
-    println("Hyperrectangle: $(vol.pointcloud.points) points, $(vol.spatialvolume.volume) Volume")
+    println("Hyperrectangle: $(vol.pointcloud.points) points, $(vol.volume) Volume")
 end
 
 
