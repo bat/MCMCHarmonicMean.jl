@@ -6,10 +6,17 @@ using HDF5
 using ProgressMeter
 
 
-function MCMCHarmonicMean.root2hdf5(T::DataType, path::String, params::Array{String}, range = Colon(), treename::String = "")
+function root2hdf5(T::DataType, path::String; params::Array{String} = Array{String}(0), range = Colon(), treename::String = "")
     if treename == ""
         treename = convert(String, split(split(path, ".")[1], "/")[end])
+        info("Tree name: $treename")
     end
+
+    if length(params) == 0
+        params = read_params(path, treename)
+        info("Parameter names: $params")
+    end
+
     filename_hdf5 = path[1:end-5] * ".h5"
 
     dim = length(params)
@@ -48,8 +55,52 @@ function MCMCHarmonicMean.root2hdf5(T::DataType, path::String, params::Array{Str
             dsargs = ("chunk", (chunk_size,), "compress", 6)
 
             @showprogress for j in eachindex(valnames, hdf5_arrays)
+                #check for constants
+                if max(hdf5_arrays[j]) == min(hdf5_arrays[j])
+                    info("Skipping constant $(valnames[j])")
+                end
+
                 file[string(valnames[j]), dsargs...] = hdf5_arrays[j]
             end
         end
     end
+end
+
+
+
+function read_params(filename::String, treename::String)
+    fileptr = pointer(filename)
+    treeptr = pointer(treename)
+
+
+    pnames = icxx"""
+
+    #include <TFile.h>
+    #include <TTree.h>
+    #include <TBranch.h>
+    auto fname = $fileptr;
+    auto tname = $treeptr;
+
+    TFile* inputfile = TFile::Open(fname, "READ");
+    TTree* ptree = (TTree*)inputfile->Get(tname);
+    char pname[100];
+
+    ptree->SetBranchAddress("name", pname);
+    int cnt = ptree->BuildIndex("parameter", "index");
+    std::vector<std::string> params;
+    int i = 0;
+    for (i = 0; i < cnt; i++)
+    {
+    ptree->GetEntryWithIndex(1, i);
+    params.push_back(pname);
+    }
+    params;
+    """
+
+    param_names = Array{String}(length(pnames))
+    for i in eachindex(param_names)
+        param_names[i] = unsafe_string(pnames[i - 1])
+    end
+
+    return param_names
 end
