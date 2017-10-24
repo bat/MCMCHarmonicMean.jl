@@ -61,32 +61,19 @@ function transform_data{T<:AbstractFloat}(dataset::DataSet{T}, W::Matrix{T}, dat
     else
         buffer = Vector{T}(dataset.P)
 
+        info(typeof(W))
+        info(typeof(dataset.data))
         dataset.data = W * dataset.data
 
         determinant = abs(det(W))
     end
 
-    sortedLogProb = sortperm(dataset.logprob, rev = true)
-
-    box = Matrix{Float64}(dataset.P, 2)
-    box[:, 1] = dataset.data[:, sortedLogProb[1]]
-    box[:, 2] = dataset.data[:, sortedLogProb[1]]
-
-    for n in sortedLogProb[2:floor(Int64, dataset.N * 0.50)]
-        for p in 1:dataset.P
-            if dataset.data[p,n] > box[p, 2]
-                box[p, 2] = dataset.data[p,n]
-            elseif dataset.data[p,n] < box[p, 1]
-                box[p, 1] = dataset.data[p,n]
-            end
-        end
-    end
-
     LogMedium("Calculate Optimal Target Probability")
-    maxP = dataset.logprob[sortedLogProb[1]]
-    minP = dataset.logprob[sortedLogProb[dataset.N]]
+    sortids = sortperm(dataset.logprob, rev=true)
+    maxP = dataset.logprob[sortids[1]]
+    minP = dataset.logprob[sortids[end]]
 
-    suggTargetProb = dataset.logprob[sortedLogProb[floor(Int64, dataset.N * 0.8)]]
+    suggTargetProb = dataset.logprob[sortids[floor(Int64, dataset.N * 0.9)]]
     suggTargetProb = exp(maxP - suggTargetProb)
     #suggTargetProb = min(100, exp(maxP - suggTargetProb))
 
@@ -94,5 +81,5 @@ function transform_data{T<:AbstractFloat}(dataset::DataSet{T}, W::Matrix{T}, dat
     LogMedium("Suggested Target Probability Factor:\t" * string(suggTargetProb))
     LogMedium("Maximum Probability Factor:\t" * string(exp(maxP - minP)))
 
-    return WhiteningResult(determinant, box, maxP-minP, suggTargetProb, W, datamean)
+    return WhiteningResult(determinant, maxP-minP, suggTargetProb, W, datamean)
 end

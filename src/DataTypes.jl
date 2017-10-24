@@ -38,7 +38,7 @@ struct HMIntegrationSettings
     stop_ifenoughpoints::Bool
 end
 HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, false, true )
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, false, false)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, true, false)
 HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, true,  false)
 
 """
@@ -47,7 +47,6 @@ HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhit
 Stores the information obtained during the Whitening Process
 # Variables
 - 'determinant::Float64' : The determinant of the whitening matrix
-- 'boundingbox::Matrix{T}' : The bounding box for possible hyper-rectangle starting points
 - 'logprobdiff::Float64' : The log. probability difference between the most probable and least probable sample
 - 'targetprobfactor::Float64' : The suggested target probability factor
 - 'whiteningmatrix::Matrix{T}' : The whitening matrix
@@ -56,7 +55,6 @@ Stores the information obtained during the Whitening Process
 
 struct WhiteningResult{T<:Real}
     determinant::Float64
-    boundingbox::Matrix{T}
     logprobdiff::Float64
     targetprobfactor::Float64
     whiteningmatrix::Matrix{T}
@@ -84,6 +82,8 @@ mutable struct SearchResult
     points::Int64
     maxLogProb::Float64
     minLogProb::Float64
+    maxWeightProb::Float64
+    minWeightProb::Float64
 end
 
 function Base.show(io::IO, sres::SearchResult)
@@ -99,6 +99,7 @@ Stores the information of the points of an e.g. HyperRectVolume
 - 'maxLogProb::Float64' : The maximum log. probability of one of the points inside the hyper-rectangle
 - 'minLogProb::Float64' : The minimum log. probability of one of the points inside the hyper-rectangle
 - 'probfactor::Float64' : The probability factor of the hyper-rectangle
+- 'probweightfactor::Float64' : The weighted probability factor
 - 'points::Int64' : The number of points inside the hyper-rectangle
 - 'pointIDs::Vector{Int64}' : the IDs of the points inside the hyper-rectangle, might be empty because it is optional and costs performance
 """
@@ -106,7 +107,10 @@ Stores the information of the points of an e.g. HyperRectVolume
 mutable struct PointCloud
     maxLogProb::Float64
     minLogProb::Float64
+    maxWeightProb::Float64
+    minWeightProb::Float64
     probfactor::Float64
+    probweightfactor::Float64
     points::Int64
     pointIDs::Vector{Int64}
 end

@@ -8,6 +8,14 @@ file (either HDF5 or ROOT) the function
 function LoadMCMCData(path::String, params::Array{String}, range = Colon(), modelname::String = "", dataFormat::DataType = Float64)::DataSet()
 can be used.
 """
+function hm_integrate(bat_input::DensitySampleVector)
+    T = typeof(bat_input.params[1,1])
+    hm_integrate(DataSet(
+        convert(Array{T, 2}, bat_input.params),
+        convert(Array{T, 1}, bat_input.log_value),
+        convert(Array{Float64, 1}, bat_input.weight)))
+end
+
 function hm_integrate(dataset::DataSet, settings::HMIntegrationSettings = HMIntegrationStandardSettings())::IntegrationResult
     if dataset.N < dataset.P * 50
         error("Not enough points for integration")
@@ -228,8 +236,10 @@ function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volu
     PtsIncrease = 0.0
     VolIncrease = 1.0
 
+    it = 0
     while vol.pointcloud.probfactor < whiteningresult.targetprobfactor / tol || vol.pointcloud.probfactor > whiteningresult.targetprobfactor
-        tol += 0.1
+        tol += 0.01 * 2^it
+        it += 1
 
         if vol.pointcloud.probfactor > whiteningresult.targetprobfactor
             #decrease side length
@@ -260,40 +270,9 @@ function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volu
     end
 
 
-    #adjust cube to  bounding box if necessary
-    newcube = deepcopy(cube)
-    for p = 1:datatree.P
-        if cube.lo[p] < whiteningresult.boundingbox[p, 1]
-            width = cube.hi[p] - cube.lo[p]
-            newcube.lo[p] = whiteningresult.boundingbox[p, 1]
-            vol = resize_integrationvol(datatree, p, vol, newcube, true)
-            if cube.lo[p] >= cube.hi[p]
-                newcube.hi[p] = min(cube.hi[p] + width, whiteningresult.boundingbox[p, 2])
-                vol = resize_integrationvol(datatree, p, vol, newcube, true)
-            end
-        end
-
-        if cube.hi[p] > whiteningresult.boundingbox[p, 2]
-            width = cube.hi[p] - cube.lo[p]
-            newcube.hi[p] = whiteningresult.boundingbox[p, 2]
-            vol = resize_integrationvol(datatree, p, vol, newcube, true)
-            if cube.hi[p] <= cube.lo[p]
-                newcube.lo[p] = max(cube.lo[p] - width, whiteningresult.boundingbox[p, 1])
-                vol = resize_integrationvol(datatree, p, vol, newcube, true)
-            end
-        end
-    end
-
 
     LogLow("\tTEST Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
 
-    #check each dimension
-    #1. Is Inside Bounding Box?
-    #1.5 Is there already empty volume?
-    #2. Are there more points available if one dimension gets larger?
-    #2.1 Yes -> Make Box bigger if ProbFactor is within limits
-    #2.2 No  -> Make Box Smaller
-    #ptsTol = 1.1
 
     wasCubeChanged = true
 
@@ -348,7 +327,7 @@ function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volu
                 newvol = resize_integrationvol(datatree, p, vol, spvol, false)
 
                 PtsIncrease = newvol.pointcloud.points / PtsIncrease
-                if newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc) && newvol.spatialvolume.lo[p] > whiteningresult.boundingbox[p, 1]
+                if newvol.pointcloud.probweightfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc)
                     vol = newvol
                     wasCubeChanged = true
                     change = true
@@ -392,7 +371,7 @@ function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volu
                 newvol = resize_integrationvol(datatree, p, vol, spvol, false)
 
                 PtsIncrease = newvol.pointcloud.points / PtsIncrease
-                if newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc) && newvol.spatialvolume.hi[p] < whiteningresult.boundingbox[p, 2]
+                if newvol.pointcloud.probweightfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc)
                     vol = newvol
                     wasCubeChanged = true
                     change = true
@@ -436,7 +415,7 @@ function create_hyperrectangle{T<:Real}(Mode::Vector{T}, datatree::Tree{T}, volu
     vol.pointcloud.maxLogProb = res.maxLogProb
     vol.pointcloud.minLogProb = res.minLogProb
     vol.pointcloud.probfactor = exp(vol.pointcloud.maxLogProb - vol.pointcloud.minLogProb)
-
+    vol.pointcloud.probweightfactor = exp(vol.pointcloud.maxWeightProb - vol.pointcloud.minWeightProb)
     return vol
 end
 

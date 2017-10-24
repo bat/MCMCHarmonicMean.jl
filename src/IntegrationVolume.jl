@@ -55,8 +55,10 @@ function resize_integrationvol(datatree::Tree, changed_dim::Int64, intvol::Integ
         end
     end
 
-    minProb = 0.0
-    maxProb = 0.0
+    minProb = Inf
+    maxProb = -Inf
+    maxwp = Inf
+    minwp = Inf
     local pointIDs::Vector{Int64}
     points = 0
 
@@ -65,6 +67,8 @@ function resize_integrationvol(datatree::Tree, changed_dim::Int64, intvol::Integ
     if increase
         maxProb = intvol.pointcloud.maxLogProb
         minProb = intvol.pointcloud.minLogProb
+        maxwp = intvol.pointcloud.maxWeightProb
+        minwp = intvol.pointcloud.minWeightProb
 
         points = intvol.pointcloud.points + res.points
 
@@ -75,12 +79,10 @@ function resize_integrationvol(datatree::Tree, changed_dim::Int64, intvol::Integ
             pointIDs = Vector{Int64}(0)
         end
 
-        if res.maxLogProb > maxProb
-            maxProb = res.maxLogProb
-        end
-        if res.minLogProb < minProb
-            minProb = res.minLogProb
-        end
+        maxProb = res.maxLogProb > maxProb ? res.maxLogProb : maxProb
+        minProb = res.minLogProb < minProb ? res.minLogProb : minProb
+        maxwp = res.maxWeightProb > maxwp ? res.maxWeightProb : maxwp
+        minwp = res.minWeightProb < minwp ? res.minWeightProb : minwp
     else
         points = intvol.pointcloud.points - res.points
 
@@ -88,10 +90,14 @@ function resize_integrationvol(datatree::Tree, changed_dim::Int64, intvol::Integ
             res = search(datatree, newrect, searchpts)
             maxProb = res.maxLogProb
             minProb = res.minLogProb
+            maxwp = res.maxWeightProb
+            minwp = res.minWeightProb
             pointIDs = res.pointIDs
         else
             maxProb = intvol.pointcloud.maxLogProb
             minProb = intvol.pointcloud.minLogProb
+            maxwp = intvol.pointcloud.maxWeightProb
+            minwp = intvol.pointcloud.minWeightProb
             pointIDs = Array{Int64, 1}(0)
         end
     end
@@ -99,6 +105,7 @@ function resize_integrationvol(datatree::Tree, changed_dim::Int64, intvol::Integ
     volume = prod(newrect.hi - newrect.lo)
 
     probFactor = exp(maxProb - minProb)
-    pointcloud = PointCloud(maxProb, minProb, probFactor, points, pointIDs)
+    probwf = exp(maxwp - minwp)
+    pointcloud = PointCloud(maxProb, minProb, maxwp, minwp, probFactor, probwf, points, pointIDs)
     return IntegrationVolume(pointcloud, deepcopy(newrect), volume)
 end

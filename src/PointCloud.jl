@@ -11,9 +11,13 @@ function PointCloud(datatree::Tree, hyperrect::HyperRectVolume, searchpts::Bool 
     maxProb = res.maxLogProb
     minProb = res.minLogProb
 
-    probFactor = exp(maxProb - minProb)
+    maxwp = res.maxWeightProb
+    minwp = res.minWeightProb
 
-    return PointCloud(maxProb, minProb, probFactor, points, pointIDs)
+    probFactor = exp(maxProb - minProb)
+    probwf = exp(maxwp - minwp)
+
+    return PointCloud(maxProb, minProb, maxwp, minwp, probFactor, probwf, points, pointIDs)
 end
 
 
