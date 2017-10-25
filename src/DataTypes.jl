@@ -54,10 +54,12 @@ struct HMIntegrationSettings
     rect_increase::AbstractFloat
     use_all_rects::Bool
     stop_ifenoughpoints::Bool
+    useMultiThreading::Bool #experimental
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, false, true )
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, true, false)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, true,  false)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, false, true,  false)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, true, false,  false)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, true,  false, false)
+HMIntegrationMultiThreadingSettings() = return HMIntegrationSettings(:StatisticalWhitening, 1000, 0.005, 0.1, true ,false, true)
 
 """
     WhiteningResult{T<:Real}

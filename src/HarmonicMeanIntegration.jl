@@ -8,21 +8,28 @@ file (either HDF5 or ROOT) the function
 function LoadMCMCData(path::String, params::Array{String}, range = Colon(), modelname::String = "", dataFormat::DataType = Float64)::DataSet()
 can be used.
 """
-function hm_integrate(bat_input::DensitySampleVector)
+function hm_integrate(bat_input::DensitySampleVector; range = Colon(), settings::HMIntegrationSettings = HMIntegrationStandardSettings())
     T = typeof(bat_input.params[1,1])
     hm_integrate(DataSet(
         convert(Array{T, 2}, bat_input.params),
         convert(Array{T, 1}, bat_input.log_value),
-        convert(Array{Float64, 1}, bat_input.weight)))
+        convert(Array{Float64, 1}, bat_input.weight)), range = range, settings = settings)
 end
 
-function hm_integrate(bat_input::Tuple{DensitySampleVector, MCMCSampleIDVector, MCMCBasicStats})
-    hm_integrate(bat_input[1])
+function hm_integrate(bat_input::Tuple{DensitySampleVector, MCMCSampleIDVector, MCMCBasicStats}; range = Colon(), settings::HMIntegrationSettings = HMIntegrationStandardSettings())
+    hm_integrate(bat_input[1], range = range, settings = settings)
 end
 
-function hm_integrate(dataset::DataSet, settings::HMIntegrationSettings = HMIntegrationStandardSettings())::IntegrationResult
+function hm_integrate(dataset::DataSet; range = Colon(), settings::HMIntegrationSettings = HMIntegrationStandardSettings())::IntegrationResult
     if dataset.N < dataset.P * 50
         error("Not enough points for integration")
+    end
+
+    if range != Colon()
+        dataset.N = length(range)
+        dataset.data = dataset.data[:, range]
+        dataset.weights = dataset.weights[range]
+        dataset.logprob = dataset.logprob[range]
     end
 
     LogHigh("Integration started. Data Points:\t$(dataset.N)\tParameters:\t$(dataset.P)")
@@ -82,65 +89,102 @@ function hm_integrate(dataset::DataSet, settings::HMIntegrationSettings = HMInte
     LogHigh("Sugg. Tolerance: $suggTol")
 
 
-    iterations = 0
+    iterations =  0
     iterations_skipped = 0
-
-    LogHigh("Create Hyperrectangles")
     maxPoints = 0
     totalpoints = 0
 
+    iterations_atomic = Atomic{Int64}(0)
+    maxPoints_atomic = Atomic{Int64}(0)
+    totalpoints_atomic = Atomic{Int64}(0)
 
-    @showprogress for i in centerIDs
-        #check if id is inside an existing Hyperrectangle
-        insideRectangle = false
-        for vol in volumes
-            if in(i, vol.pointcloud.pointIDs)
-                iterations_skipped += 1
-                insideRectangle = true
-                break
+    LogHigh("Create Hyperrectangles")
+
+    thread_volumes = Array{IntegrationVolume, 1}(length(centerIDs))
+
+    if settings.stop_ifenoughpoints == false && settings.use_all_rects && settings.useMultiThreading
+        #threadsafe
+        Log("Using $(nthreads()) threads")
+        @threads for i in eachindex(centerIDs)
+            id = centerIDs[i]
+            atomic_add!(iterations_atomic, 1)
+
+            vol = create_hyperrectangle(dataset.data[:, id], datatree, volumes, whiteningresult, suggTol, settings)
+
+            if vol.pointcloud.probfactor == 1.0 || vol.pointcloud.points < dataset.P * 4
+            else
+                thread_volumes[i] = vol
+                atomic_add!(totalpoints_atomic, vol.pointcloud.points)
+                atomic_max!(maxPoints_atomic, vol.pointcloud.points)
             end
         end
-        if insideRectangle
-            continue
+
+        iterations = iterations_atomic.value
+        maxPoints = maxPoints_atomic.value
+        totalpoints = totalpoints_atomic.value
+
+
+        #get ssigned volumes
+        for i in eachindex(thread_volumes)
+            if isassigned(thread_volumes, i)
+                push!(volumes, thread_volumes[i])
+            end
         end
-        iterations += 1
 
-        vol = create_hyperrectangle(dataset.data[:, i], datatree, volumes, whiteningresult, suggTol, settings)
+    else
+        #not threadsafe
+        @showprogress for i in centerIDs
+            #check if id is inside an existing Hyperrectangle
 
-
-        isRectInsideAnother = false
-
-        if !settings.use_all_rects
-            for other in volumes
-                overlap = calculate_overlapping(vol, other.spatialvolume)
-                if overlap > 0.75
-                    isRectInsideAnother = true
+            #=insideRectangle = false
+            for vol in volumes
+                if in(i, vol.pointcloud.pointIDs)
+                    iterations_skipped += 1
+                    insideRectangle = true
                     break
                 end
             end
-        end
+            if insideRectangle
+                continue
+            end
+            =#
+            iterations += 1
 
-        if isRectInsideAnother
-            iterations_skipped += 1
-            LogLow("Hyperrectangle (ID = $i) discarded because it was inside another Rectangle.")
-        elseif vol.pointcloud.probfactor == 1.0 || vol.pointcloud.points < dataset.P * 4
-            LogLow("Hyperrectangle (ID = $i ) discarded because it has not enough Points.\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
-        else
-            push!(volumes, vol)
-            totalpoints += vol.pointcloud.points
+            vol = create_hyperrectangle(dataset.data[:, i], datatree, volumes, whiteningresult, suggTol, settings)
 
+            isRectInsideAnother = false
 
-            LogMedium("$(length(volumes)). Hyperrectangle (ID = $i ) found. Rectangles discarded: $iterations_skipped\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
-            if vol.pointcloud.points > maxPoints
-                maxPoints = vol.pointcloud.points
+            if !settings.use_all_rects
+                for other in volumes
+                    overlap = calculate_overlapping(vol, other.spatialvolume)
+                    if overlap > 0.75
+                        isRectInsideAnother = true
+                        break
+                    end
+                end
+            end
+            if isRectInsideAnother
+                iterations_skipped += 1
+                #LogLow("Hyperrectangle (ID = $i) discarded because it was inside another Rectangle.")
+            elseif vol.pointcloud.probfactor == 1.0 || vol.pointcloud.points < dataset.P * 4
+                #LogLow("Hyperrectangle (ID = $i ) discarded because it has not enough Points.\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
+            else
+                push!(volumes, vol)
+                totalpoints += vol.pointcloud.points
+
+                #LogMedium("$(length(volumes)). Hyperrectangle (ID = $i ) found. Rectangles discarded: $iterations_skipped\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
+                if vol.pointcloud.points > maxPoints
+                    maxPoints = vol.pointcloud.points
+                end
+            end
+            if settings.stop_ifenoughpoints && totalpoints > 0.5 * dataset.N
+                #LogMedium("hyper-rectangle creation process stopped because the created hyper-rectangles have already enough points")
+                break
             end
         end
-
-        if settings.stop_ifenoughpoints && totalpoints > 0.5 * dataset.N
-            LogMedium("hyper-rectangle creation process stopped because the created hyper-rectangles have already enough points")
-            break
-        end
     end
+
+
 
 
     #remove rectangles with less than 10% points of the largest rectangle (in terms of points)
@@ -190,7 +234,7 @@ function hm_integrate(dataset::DataSet, settings::HMIntegrationSettings = HMInte
     end
 
     result = 0.0
-    error = 0.0
+    interror = 0.0
     points = 0.0
     volume = 0.0
     #normerror = 0.0
@@ -201,15 +245,15 @@ function hm_integrate(dataset::DataSet, settings::HMIntegrationSettings = HMInte
     end
     #result /= normerror
     for i in 1:nRes
-        error += (IntResults[i].integral - result)^2
+        interror += (IntResults[i].integral - result)^2
     end
-    error = sqrt(error / (nRes - 1))
+    interror = sqrt(interror / (nRes - 1))
     if nRes == 1
-        error = IntResults[1].error
+        interror = IntResults[1].interror
     end
 
-    LogHigh("Integration Result:\t $result +- $error\nRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume")
-    return IntegrationResult(result, error, nRes, points, volume, volumes, centerIDs, whiteningresult)
+    LogHigh("Integration Result:\t $result +- $interror\nRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume")
+    return IntegrationResult(result, interror, nRes, points, volume, volumes, centerIDs, whiteningresult)
 end
 
 
@@ -494,11 +538,11 @@ function integrate_hyperrectangle(datatree::Tree, dataset::DataSet, integrationv
         count += Results[i].points / nIntegrals
     end
 
-    error = 0.0
+    interror = 0.0
     for i = 1:nIntegrals
-        error += (Results[i].integral - I) ^ 2
+        interror += (Results[i].integral - I) ^ 2
     end
-    error = sqrt(error / (nIntegrals - 1))
+    interror = sqrt(interror / (nIntegrals - 1))
 
     if isnan(I) || I == Inf || I == -Inf
         res = integrate_hyperrectangle_noerror(dataset, integrationvol, determinant)
@@ -506,5 +550,5 @@ function integrate_hyperrectangle(datatree::Tree, dataset::DataSet, integrationv
         return IntermediateResult(res.integral, 0.0, res.points, integrationvol.volume)
     end
 
-    return IntermediateResult(I, error, count, integrationvol.volume)
+    return IntermediateResult(I, interror, count, integrationvol.volume)
 end

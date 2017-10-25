@@ -32,7 +32,7 @@ function create_search_tree(dataset::DataSet, MinCuts::Integer = 8, MaxLeafsize:
     #define dimension list
     local DimensionList::Vector{Int64}
     if Cuts > MinCuts
-        DimensionList=[i for i=1:dataset.P]
+        DimensionList= [i for i=1:dataset.P]
     else
         DimensionList = [i for i=1:recDepth]
     end
@@ -41,7 +41,9 @@ function create_search_tree(dataset::DataSet, MinCuts::Integer = 8, MaxLeafsize:
     LogMedium("Cuts $Cuts\tLeafsize $Leafsize\tRec. Depth $recDepth")
     CutList = Vector{Float64}(0)
 
-    createSearchTree(newData, newLogProb, newWeights, ids, DimensionList, CutList, Cuts, Leafsize, 1)
+    if recDepth > 0
+        createSearchTree(newData, newLogProb, newWeights, ids, DimensionList, CutList, Cuts, Leafsize, 1)
+    end
 
     return Tree(newData, newLogProb, newWeights, ids, Cuts, Leafsize, DimensionList, length(DimensionList), CutList, dataset.N, dataset.P)
 end
@@ -108,6 +110,34 @@ function search(datatree::Tree, searchvol::HyperRectVolume, SearchPoints::Bool =
     maxI = length(datatree.CutList)
 
     i = 1
+    if maxI == 0
+        #only on leaf
+        for n = 1:datatree.N
+            inVol = true
+            for p = 1:datatree.P
+                if datatree.SortedData[p, n] < searchvol.lo[p] || datatree.SortedData[p, n] > searchvol.hi[p]
+                    inVol = false
+                    break
+                end
+            end
+
+            if inVol
+                points += 1
+
+                if SearchPoints
+                    push!(pointIDs, datatree.SortedIDs[n])
+                end
+                prob = datatree.SortedLogProb[n]
+                w = datatree.SortedWeights[n]
+                maxprob = prob > maxprob ? prob : maxprob
+                maxwp = prob * w > maxwp ? prob * w : maxwp
+                minprob = prob < minprob ? prob : minprob
+                minwp = prob * w < minwp ? prob * w : minwp
+            end
+        end
+        return SearchResult(pointIDs, points, maxprob, minprob, maxwp, minwp)
+
+    end
     while i <= maxI
         if currentRecursion < maxRecursion
             currentRecursion += 1

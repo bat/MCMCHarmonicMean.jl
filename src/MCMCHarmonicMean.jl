@@ -10,7 +10,7 @@ using Distributions
 using HDF5
 using StatsBase
 using BAT
-
+using Base.Threads
 
 include("./DataTypes.jl")
 
@@ -37,6 +37,7 @@ export DataSet
 export HMIntegrationPrecisionSettings
 export HMIntegrationFastSettings
 export HMIntegrationStandardSettings
+export HMIntegrationMultiThreadingSettings
 export HMIntegrationSettings
 
 
