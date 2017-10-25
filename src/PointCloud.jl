@@ -1,7 +1,12 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
+"""
+    PointCloud(datatree::Tree, hyperrect::HyperRectVolume, searchpts::Bool = false)::PointCloud
 
+creates a point cloud by searching the data tree for points which are inside the hyper-rectangle
+The parameter searchpts determines if an array of the point IDs is created as well 
+"""
 function PointCloud(datatree::Tree, hyperrect::HyperRectVolume, searchpts::Bool = false)::PointCloud
     res = search(datatree, hyperrect, searchpts)
 

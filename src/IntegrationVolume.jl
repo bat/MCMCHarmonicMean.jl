@@ -1,5 +1,12 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
+
+
+"""
+    IntegrationVolume(datatree::Tree, spvol::SpatialVolume, searchpts::Bool = true)::IntegrationVolume
+
+creates an integration region by calculating the point cloud an the volume of the spatial volume.
+"""
 function IntegrationVolume(datatree::Tree, spvol::SpatialVolume, searchpts::Bool = true)::IntegrationVolume
     cloud = PointCloud(datatree, spvol, searchpts)
     vol = _getvolume(spvol)
@@ -7,6 +14,12 @@ function IntegrationVolume(datatree::Tree, spvol::SpatialVolume, searchpts::Bool
     return IntegrationVolume(cloud, spvol, vol)
 end
 
+
+"""
+    IntegrationVolume!(intvol::IntegrationVolume, datatree::Tree, spvol::SpatialVolume, searchpts::Bool = true)
+
+updates an integration volume with new boundaries. Recalculates the pointcloud and volume.
+"""
 function IntegrationVolume!(intvol::IntegrationVolume, datatree::Tree, spvol::SpatialVolume, searchpts::Bool = true)
     cloud = PointCloud(datatree, spvol, searchpts)
     vol = _getvolume(spvol)
@@ -25,7 +38,11 @@ end
 end
 
 
-#only works correct if the resized dim gets changed and nothing else
+"""
+     resize_integrationvol(datatree::Tree, changed_dim::Int64, intvol::IntegrationVolume, newrect::HyperRectVolume, searchpts::Bool = false)::IntegrationVolume
+
+resizes an integration volume along only one(!!) dimension, faster than recalcuating the integration volume with IntegrationVolume!
+"""
 #TODO provide targetIntegrationVolume to reduce memory consumption
 function resize_integrationvol(datatree::Tree, changed_dim::Int64, intvol::IntegrationVolume, newrect::HyperRectVolume, searchpts::Bool = false)::IntegrationVolume
     P = datatree.P

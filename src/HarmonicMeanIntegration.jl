@@ -16,6 +16,10 @@ function hm_integrate(bat_input::DensitySampleVector)
         convert(Array{Float64, 1}, bat_input.weight)))
 end
 
+function hm_integrate(bat_input::Tuple{DensitySampleVector, MCMCSampleIDVector, MCMCBasicStats})
+    hm_integrate(bat_input[1])
+end
+
 function hm_integrate(dataset::DataSet, settings::HMIntegrationSettings = HMIntegrationStandardSettings())::IntegrationResult
     if dataset.N < dataset.P * 50
         error("Not enough points for integration")

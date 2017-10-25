@@ -29,6 +29,24 @@ function Base.show(io::IO, data::DataSet)
 end
 
 
+"""
+    HMIntegrationSettings
+
+holds the settings for the hm_integrate function. There are several default constructors available:
+HMIntegrationFastSettings()
+HMIntegrationStandardSettings()
+HMIntegrationPrecisionSettings()
+
+#Variables
+- 'whitening_method::Symbol' : which whitening method to use
+- 'max_startingIDs::Integer' : how many starting ids are allowed to be generated
+- 'max_startingIDs_fraction::AbstractFloat' : how many points are considered as possible starting points as a fraction of total points available
+- 'rect_increase::AbstractFloat' : describes the procentual rectangle volume increase/decrease during hyperrectangle creation. Low values can increase the precision if enough points are available but can cause systematically wrong results if not enough points are available.
+- 'use_all_rects::Bool' : All rectangles are used for the integration process no matter how big their overlap is. If enabled the rectangles are weighted by their overlap.
+- 'stop_ifenoughpoints::Bool' : if the hyper-rectangles created already contain enough points than no further rectangles are created. Increases the performance for the integration of easy target densities. Might decrease the reliability of the error estimation.
+end
+
+"""
 struct HMIntegrationSettings
     whitening_method::Symbol
     max_startingIDs::Integer

@@ -1,6 +1,11 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
+"""
+    HyperCubeVolume{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVolume
+
+creates a hypercube shaped spatial volume
+"""
 function HyperCubeVolume{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVolume
     dim = length(origin)
     lo = Vector{T}(dim)
@@ -11,6 +16,11 @@ function HyperCubeVolume{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVo
     return HyperRectVolume(lo, hi)
 end
 
+"""
+    HyperCubeVolume{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVolume
+
+resizes a hypercube shaped spatial volume
+"""
 function HyperCubeVolume!{T<:Real}(rect::HyperRectVolume{T}, neworigin::Vector{T}, newedgelength::T)
     _setcubeboundaries!(rect.lo, rect.hi, neworigin, newedgelength)
 end
@@ -22,7 +32,11 @@ end
     end
 end
 
+"""
+    find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{Int64}
 
+finds possible starting points for the hyperrectangle creation
+"""
 function find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{Int64}
     weight_Prob = 1.0
     weight_Dens = 1.0
