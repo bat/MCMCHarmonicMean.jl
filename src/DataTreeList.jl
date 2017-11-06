@@ -1,45 +1,45 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
-mutable struct Tree{T<:Real}
+mutable struct Tree{T<:AbstractFloat, I<:Integer}
     SortedData::Matrix{T}
     SortedLogProb::Vector{T}
     SortedWeights::Vector{T}
-    SortedIDs::Vector{Int64}
+    SortedIDs::Vector{I}
 
-    Cuts::Int64
-    Leafsize::Int64
+    Cuts::I
+    Leafsize::I
 
-    DimensionList::Vector{Int64}
-    RecursionDepth::Int64
+    DimensionList::Vector{I}
+    RecursionDepth::I
     CutList::Vector{T}
-    N::Int64
-    P::Int64
+    N::I
+    P::I
 end
 
-function create_search_tree(dataset::DataSet, MinCuts::Integer = 8, MaxLeafsize::Integer = 200)::Tree
+function create_search_tree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, MinCuts::I = 8, MaxLeafsize::I = 200)::Tree{T, I}
     LogMedium("Create Search Tree")
     newData = deepcopy(dataset.data)
     newLogProb = deepcopy(dataset.logprob)
     newWeights = deepcopy(dataset.weights)
-    ids = [i for i = 1:dataset.N]
+    ids = [i for i::I = 1:dataset.N]
 
     suggCuts = (dataset.N / MaxLeafsize)^(1.0 / dataset.P)
-    Cuts = ceil(Int64, max(MinCuts, suggCuts))
+    Cuts = ceil(I, max(MinCuts, suggCuts))
 
-    recDepth = ceil(Int64, log(dataset.N / MaxLeafsize) / log(Cuts))
+    recDepth = ceil(I, log(dataset.N / MaxLeafsize) / log(Cuts))
 
     #define dimension list
-    local DimensionList::Vector{Int64}
+    local DimensionList::Vector{I}
     if Cuts > MinCuts
-        DimensionList= [i for i=1:dataset.P]
+        DimensionList= [i for i::I = 1:dataset.P]
     else
-        DimensionList = [i for i=1:recDepth]
+        DimensionList = [i for i::I = 1:recDepth]
     end
 
-    Leafsize = ceil(Int64, dataset.N / Cuts^recDepth)
+    Leafsize = ceil(I, dataset.N / Cuts^recDepth)
     LogMedium("Cuts $Cuts\tLeafsize $Leafsize\tRec. Depth $recDepth")
-    CutList = Vector{Float64}(0)
+    CutList = Vector{T}(0)
 
     if recDepth > 0
         createSearchTree(newData, newLogProb, newWeights, ids, DimensionList, CutList, Cuts, Leafsize, 1)
@@ -48,16 +48,16 @@ function create_search_tree(dataset::DataSet, MinCuts::Integer = 8, MaxLeafsize:
     return Tree(newData, newLogProb, newWeights, ids, Cuts, Leafsize, DimensionList, length(DimensionList), CutList, dataset.N, dataset.P)
 end
 
-function createSearchTree{T}(Data::Matrix{T}, LogProb::Vector{T}, Weights::Vector{T}, IDs::Vector{Int64}, DimensionList::Vector{Int64}, CutList::Vector{Float64},
-        Cuts::Int64, Leafsize::Int64, StartID::Int64 = 0)
-    remainingRec = length(DimensionList)
+function createSearchTree{T<:AbstractFloat, I<:Integer}(Data::Matrix{T}, LogProb::Vector{T}, Weights::Vector{T}, IDs::Vector{I}, DimensionList::Vector{I}, CutList::Vector{T},
+        Cuts::I, Leafsize::I, StartID::I = 0)
+    remainingRec::I = length(DimensionList)
 
-    stopMax = length(LogProb)
-    thisLeaf = Leafsize * Cuts^(remainingRec - 1)
-    bigLeaf = Leafsize * Cuts^remainingRec
+    stopMax::I = length(LogProb)
+    thisLeaf::I = Leafsize * Cuts^(remainingRec - 1)
+    bigLeaf::I = Leafsize * Cuts^remainingRec
 
-    startInt = StartID
-    stopInt = StartID + bigLeaf - 1
+    startInt::I = StartID
+    stopInt::I = StartID + bigLeaf - 1
     if stopInt > stopMax
         stopInt = stopMax
     end
@@ -71,8 +71,8 @@ function createSearchTree{T}(Data::Matrix{T}, LogProb::Vector{T}, Weights::Vecto
 
 
     if remainingRec >= 1
-        start = 0
-        stop = StartID - 1
+        start::I = 0
+        stop::I = StartID - 1
 
         for i = 1:Cuts
             if stop == stopMax
@@ -94,27 +94,33 @@ function createSearchTree{T}(Data::Matrix{T}, LogProb::Vector{T}, Weights::Vecto
     end
 end
 
-function search(datatree::Tree, searchvol::HyperRectVolume, SearchPoints::Bool = false)::SearchResult
-    points = 0
-    pointIDs = Vector{Int64}()
-    maxprob = -Inf
-    minprob = Inf
-    maxwp = -Inf
-    minwp = Inf
+function search{T<:AbstractFloat, I<:Integer}(datatree::Tree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)::SearchResult
+    res = SearchResult(T, I)
+    search!(res, datatree, searchvol, searchpoints)
+    return res
+end
 
-    currentRecursion = 0
-    currentDimension = 0
-    treePos = Vector{Int64}()
+function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, datatree::Tree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)
+    result.points = 0
+    resize!(result.pointIDs, 0)
+    result.maxLogProb = -Inf
+    result.minLogProb = Inf
+    result.maxWeightProb = -Inf
+    result.minWeightProb = Inf
 
-    maxRecursion = datatree.RecursionDepth
-    maxI = length(datatree.CutList)
+    currentRecursion::I = 0
+    currentDimension::I = 0
+    treePos = Vector{I}(0)
 
-    i = 1
+    maxRecursion::I = datatree.RecursionDepth
+    maxI::I = length(datatree.CutList)
+
+    i::I = 1
     if maxI == 0
         #only on leaf
-        for n = 1:datatree.N
+        for n::I = 1:datatree.N
             inVol = true
-            for p = 1:datatree.P
+            for p::I = 1:datatree.P
                 if datatree.SortedData[p, n] < searchvol.lo[p] || datatree.SortedData[p, n] > searchvol.hi[p]
                     inVol = false
                     break
@@ -122,20 +128,20 @@ function search(datatree::Tree, searchvol::HyperRectVolume, SearchPoints::Bool =
             end
 
             if inVol
-                points += 1
+                result.points += 1
 
-                if SearchPoints
-                    push!(pointIDs, datatree.SortedIDs[n])
+                if searchpoints
+                    push!(result.pointIDs, datatree.SortedIDs[n])
                 end
                 prob = datatree.SortedLogProb[n]
                 w = datatree.SortedWeights[n]
-                maxprob = prob > maxprob ? prob : maxprob
-                maxwp = prob * w > maxwp ? prob * w : maxwp
-                minprob = prob < minprob ? prob : minprob
-                minwp = prob * w < minwp ? prob * w : minwp
+                result.maxLogProb = max(result.maxLogProb, prob)
+                result.minLogProb = min(result.minLogProb, prob)
+                result.maxWeightProb = max(result.maxWeightProb, w)
+                result.minWeightProb = min(result.minWeightProb, w)
             end
         end
-        return SearchResult(pointIDs, points, maxprob, minprob, maxwp, minwp)
+        return
 
     end
     while i <= maxI
@@ -156,12 +162,12 @@ function search(datatree::Tree, searchvol::HyperRectVolume, SearchPoints::Bool =
         currentDimension = datatree.DimensionList[currentRecursion]
 
 
-        diff = 1
-        for r = 1:(maxRecursion - currentRecursion)
+        diff::I = 1
+        for r::I = 1:(maxRecursion - currentRecursion)
             diff += datatree.Cuts^r
         end
-        low = datatree.CutList[i]
-        high = i + diff > maxI ? datatree.CutList[end] : datatree.CutList[i+diff]
+        low::T = datatree.CutList[i]
+        high::T = i + diff > maxI ? datatree.CutList[end] : datatree.CutList[i+diff]
         if treePos[currentDimension] == datatree.Cuts
             high = Inf
         end
@@ -169,7 +175,7 @@ function search(datatree::Tree, searchvol::HyperRectVolume, SearchPoints::Bool =
 
         if searchvol.lo[currentDimension] > high || searchvol.hi[currentDimension] < low
             #skip this interval
-            i+=diff
+            i += diff
             if currentDimension < maxRecursion
                 currentRecursion -= 1
             end
@@ -180,23 +186,14 @@ function search(datatree::Tree, searchvol::HyperRectVolume, SearchPoints::Bool =
         if currentRecursion == maxRecursion
             startID, stopID = getDataPositions(datatree, treePos)
 
-            res = searchInterval(datatree, searchvol, startID, stopID, SearchPoints)
-            points += res.points
-            maxprob = res.maxLogProb > maxprob ? res.maxLogProb : maxprob
-            minprob = res.minLogProb < minprob ? res.minLogProb : minprob
-            maxwp = res.maxWeightProb > maxwp ? res.maxWeightProb : maxwp
-            minwp = res.minWeightProb < minwp ? res.minWeightProb : minwp
-            if SearchPoints
-                append!(pointIDs, res.pointIDs)
-            end
+            searchInterval!(result, datatree, searchvol, startID, stopID, searchpoints)
         end
         i += 1
     end
 
-    return SearchResult(pointIDs, points, maxprob, minprob, maxwp, minwp)
 end
 
-@inline function getDataPositions(datatree::Tree, TreePos::Vector{Int64})
+@inline function getDataPositions{T<:AbstractFloat, I<:Integer}(datatree::Tree{T, I}, TreePos::Vector{I})
     maxRecursion = datatree.RecursionDepth
     startID = 1
     recCntr = maxRecursion
@@ -213,22 +210,15 @@ end
 end
 
 
-function searchInterval(datatree::Tree, searchvol::HyperRectVolume, start::Int64, stop::Int64, SearchPoints::Bool)::SearchResult
-    points = 0
-    pointIDs = Vector{Int64}(0)
-    maxprob = -Inf
-    minprob = Inf
-    maxwp = -Inf
-    minwp = Inf
+function searchInterval!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, datatree::Tree{T, I}, searchvol::HyperRectVolume{T}, start::I, stop::I, searchpoints::Bool)
+    dimsort::I = datatree.DimensionList[datatree.RecursionDepth]
 
-    dimsort = datatree.DimensionList[datatree.RecursionDepth]
-
-    for i = start:stop
+    for i::I = start:stop
         if datatree.SortedData[dimsort, i] > searchvol.hi[dimsort]
             break
         end
         inVol = true
-        for p = 1:datatree.P
+        for p::I = 1:datatree.P
             if datatree.SortedData[p, i] < searchvol.lo[p] || datatree.SortedData[p, i] > searchvol.hi[p]
                 inVol = false
                 break
@@ -236,19 +226,17 @@ function searchInterval(datatree::Tree, searchvol::HyperRectVolume, start::Int64
         end
 
         if inVol
-            points += 1
+            result.points += 1
 
-            if SearchPoints
-                push!(pointIDs, datatree.SortedIDs[i])
+            if searchpoints
+                push!(result.pointIDs, datatree.SortedIDs[i])
             end
             prob = datatree.SortedLogProb[i]
             w = datatree.SortedWeights[i]
-            maxprob = prob > maxprob ? prob : maxprob
-            maxwp = prob * w > maxwp ? prob * w : maxwp
-            minprob = prob < minprob ? prob : minprob
-            minwp = prob * w < minwp ? prob * w : minwp
+            result.maxLogProb = max(result.maxLogProb, prob)
+            result.minLogProb = min(result.minLogProb, prob)
+            result.maxWeightProb = max(result.maxWeightProb, w)
+            result.minWeightProb = min(result.minWeightProb, w)
         end
     end
-
-    return SearchResult(pointIDs, points, maxprob, minprob, maxwp, minwp)
 end

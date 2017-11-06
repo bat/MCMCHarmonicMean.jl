@@ -3,22 +3,22 @@
 
 
 """
-    DataSet{T<:Real}
+    DataSet{T<:AbstractFloat, I<:Integer}
 
 Holds the MCMC output. For construction use constructor: function DataSet{T<:Real}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
 # Variables
 - 'data::Matrix{T}' : An P x N array with N data points with P parameters.
 - 'logprob::Vector{T}' : The logarithmic probability for each data point
 - 'weights::Vector{T}' : How often each sample occurred. Set to an array of ones if working directly on MCMC output
-- 'N::Integer' : number of data points.
-- 'P::Integer' : number of parameters.
+- 'N::I' : number of data points.
+- 'P::I' : number of parameters.
 """
-mutable struct DataSet{T<:Real}
+mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     data::Matrix{T}
     logprob::Vector{T}
     weights::Vector{T}
-    N::Integer
-    P::Integer
+    N::I
+    P::I
 end
 function DataSet{T<:Real}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
     return DataSet(data, logprob, weights, size(data)[2], size(data)[1])
@@ -44,6 +44,7 @@ HMIntegrationPrecisionSettings()
 - 'rect_increase::AbstractFloat' : describes the procentual rectangle volume increase/decrease during hyperrectangle creation. Low values can increase the precision if enough points are available but can cause systematically wrong results if not enough points are available.
 - 'use_all_rects::Bool' : All rectangles are used for the integration process no matter how big their overlap is. If enabled the rectangles are weighted by their overlap.
 - 'stop_ifenoughpoints::Bool' : if the hyper-rectangles created already contain enough points than no further rectangles are created. Increases the performance for the integration of easy target densities. Might decrease the reliability of the error estimation.
+- 'useMultiThreading' : activate experimental multithreading support. need use_all_rects enabled and stop_ifenoughpoints disabled.
 end
 
 """
@@ -54,29 +55,28 @@ struct HMIntegrationSettings
     rect_increase::AbstractFloat
     use_all_rects::Bool
     stop_ifenoughpoints::Bool
-    useMultiThreading::Bool #experimental
+    useMultiThreading::Bool
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, false, true,  false)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, true, false,  false)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, true,  false, false)
-HMIntegrationMultiThreadingSettings() = return HMIntegrationSettings(:StatisticalWhitening, 1000, 0.005, 0.1, true ,false, true)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, true, false, true)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, true, false, true)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, true, false, true)
 
 """
-    WhiteningResult{T<:Real}
+    WhiteningResult{T<:AbstractFloat}
 
 Stores the information obtained during the Whitening Process
 # Variables
-- 'determinant::Float64' : The determinant of the whitening matrix
-- 'logprobdiff::Float64' : The log. probability difference between the most probable and least probable sample
-- 'targetprobfactor::Float64' : The suggested target probability factor
+- 'determinant::T' : The determinant of the whitening matrix
+- 'logprobdiff::T' : The log. probability difference between the most probable and least probable sample
+- 'targetprobfactor::T' : The suggested target probability factor
 - 'whiteningmatrix::Matrix{T}' : The whitening matrix
 - 'meanvalue::Vector{T}' : the mean vector of the input data
 """
 
-struct WhiteningResult{T<:Real}
-    determinant::Float64
-    logprobdiff::Float64
-    targetprobfactor::Float64
+struct WhiteningResult{T<:AbstractFloat}
+    determinant::T
+    logprobdiff::T
+    targetprobfactor::T
     whiteningmatrix::Matrix{T}
     meanvalue::Vector{T}
 end
@@ -87,23 +87,31 @@ end
 
 
 """
-    SearchResult
+    SearchResult{T<:AbstractFloat, I<:Integer}
 
 Stores the results of the search tree's search function
 # Variables
-- 'pointIDs::Array{Int64, 1}' : the IDs of the points found, might be empty because it is optional
-- 'points::Int64' : The number of points found.
-- 'maxLogProb::Float64' : the maximum log. probability of the points found.
-- 'minLogProb::Float64' : the minimum log. probability of the points found.
+- 'pointIDs::Vector{I}' : the IDs of the points found, might be empty because it is optional
+- 'points::I' : The number of points found.
+- 'maxLogProb::T' : the maximum log. probability of the points found.
+- 'minLogProb::T' : the minimum log. probability of the points found.
+- 'maxWeightProb::T' : the weighted minimum log. probability found.
+- 'minWeightProb::T' : the weighted maximum log. probfactor found.
 """
 
-mutable struct SearchResult
-    pointIDs::Array{Int64, 1}
-    points::Int64
-    maxLogProb::Float64
-    minLogProb::Float64
-    maxWeightProb::Float64
-    minWeightProb::Float64
+mutable struct SearchResult{T<:AbstractFloat, I<:Integer}
+    pointIDs::Vector{I}
+    points::I
+    maxLogProb::T
+    minLogProb::T
+    maxWeightProb::T
+    minWeightProb::T
+end
+
+function SearchResult(T::DataType, I::DataType)
+    @assert T<:AbstractFloat
+    @assert I<:Integer
+    return SearchResult(Vector{I}(0), I(0), T(0), T(0), T(0), T(0))
 end
 
 function Base.show(io::IO, sres::SearchResult)
@@ -112,27 +120,29 @@ end
 
 
 """
-    PointCloud
+    PointCloud{T<:AbstractFloat, I<:Integer}
 
 Stores the information of the points of an e.g. HyperRectVolume
 # Variables
-- 'maxLogProb::Float64' : The maximum log. probability of one of the points inside the hyper-rectangle
-- 'minLogProb::Float64' : The minimum log. probability of one of the points inside the hyper-rectangle
-- 'probfactor::Float64' : The probability factor of the hyper-rectangle
-- 'probweightfactor::Float64' : The weighted probability factor
-- 'points::Int64' : The number of points inside the hyper-rectangle
-- 'pointIDs::Vector{Int64}' : the IDs of the points inside the hyper-rectangle, might be empty because it is optional and costs performance
+- 'maxLogProb::T' : The maximum log. probability of one of the points inside the hyper-rectangle
+- 'minLogProb::T' : The minimum log. probability of one of the points inside the hyper-rectangle
+- 'maxWeightProb::T' : the weighted max. log. probability
+- 'minWeightProb::T' : the weighted min. log. probability
+- 'probfactor::T' : The probability factor of the hyper-rectangle
+- 'probweightfactor::T' : The weighted probability factor
+- 'points::I' : The number of points inside the hyper-rectangle
+- 'pointIDs::Vector{I}' : the IDs of the points inside the hyper-rectangle, might be empty because it is optional and costs performance
 """
 
-mutable struct PointCloud
-    maxLogProb::Float64
-    minLogProb::Float64
-    maxWeightProb::Float64
-    minWeightProb::Float64
-    probfactor::Float64
-    probweightfactor::Float64
-    points::Int64
-    pointIDs::Vector{Int64}
+mutable struct PointCloud{T<:AbstractFloat, I<:Integer}
+    maxLogProb::T
+    minLogProb::T
+    maxWeightProb::T
+    minWeightProb::T
+    probfactor::T
+    probweightfactor::T
+    points::I
+    pointIDs::Vector{I}
 end
 
 function Base.show(io::IO, cloud::PointCloud)
@@ -141,20 +151,20 @@ end
 
 
 """
-    IntegrationVolume
+    IntegrationVolume{T<:AbstractFloat, I<:Integer}
 
 # Variables
-- 'pointcloud::PointCloud' : holds the point cloud of the integration volume
-- 'spatialvolume::SpatialVolume' : the boundaries of the integration volume
-- 'volume::Float64' : the volume
+- 'pointcloud::PointCloud{T, I}' : holds the point cloud of the integration volume
+- 'spatialvolume::SpatialVolume{T}' : the boundaries of the integration volume
+- 'volume::T' : the volume
 
 Hold the point cloud and the spatial volume for integration.
 """
 
-mutable struct IntegrationVolume
-    pointcloud::PointCloud
-    spatialvolume::SpatialVolume
-    volume::Float64
+mutable struct IntegrationVolume{T<:AbstractFloat, I<:Integer}
+    pointcloud::PointCloud{T, I}
+    spatialvolume::SpatialVolume{T}
+    volume::T
 end
 function Base.show(io::IO, vol::IntegrationVolume)
     println("Hyperrectangle: $(vol.pointcloud.points) points, $(vol.volume) Volume")
@@ -164,41 +174,41 @@ end
 
 
 """
-    IntegrationResult
+    IntegrationResult{T<:AbstractFloat, I<:Integer}
 
 Includes all the informations of the integration process, including a list of hyper-rectangles, the results of the whitening transformation,
 the starting ids, and the average number of points and volume of the created hyper-rectangles.
 
 # Variables
-- 'integral::Float64' : The Harmonic Mean integration result
-- 'error::Float64' : an error estimation. the quality of the error estimation depends on the number of hyper-rectangles created (the more the better)
-- 'nvols::Int64' : the number of hyper-rectangles used for the integration
-- 'points::Float64' : average number of points
-- 'volume::Float64' : average volume
-- 'volumelist::Vector{IntegrationVolume}' : a list of the hyper-rectangles
-- 'startingIDs::Array{Int64, 1}' : a list of possible starting points for the hyper-rectangle creation process
-- 'whiteningresult::WhiteningResult' : the results of the whitening transformation
+- 'integral::T' : The Harmonic Mean integration result
+- 'error::T' : an error estimation. the quality of the error estimation depends on the number of hyper-rectangles created (the more the better)
+- 'nvols::I' : the number of hyper-rectangles used for the integration
+- 'points::T' : average number of points
+- 'volume::T' : average volume
+- 'volumelist::Vector{IntegrationVolume{T, I}}' : a list of the hyper-rectangles
+- 'startingIDs::Vector{I}' : a list of possible starting points for the hyper-rectangle creation process
+- 'whiteningresult::WhiteningResult{T}' : the results of the whitening transformation
 """
-struct IntegrationResult
-    integral::Float64
-    error::Float64
-    nvols::Int64
-    points::Float64
-    volume::Float64
-    volumelist::Vector{IntegrationVolume}
-    startingIDs::Vector{Int64}
-    whiteningresult::WhiteningResult
+struct IntegrationResult{T<:AbstractFloat, I<:Integer}
+    integral::T
+    error::T
+    nvols::I
+    points::T
+    volume::T
+    volumelist::Vector{IntegrationVolume{T, I}}
+    startingIDs::Vector{I}
+    whiteningresult::WhiteningResult{T}
 end
 
 function Base.show(io::IO, ires::IntegrationResult)
     println("Integration Result: $(ires.integral) +- $(ires.error), Rectangles: $(ires.nvols), average Points: $(ires.points), average Volume: $(ires.volume)")
 end
 
-struct IntermediateResult
-    integral::Float64
-    error::Float64
-    points::Float64
-    volume::Float64
+struct IntermediateResult{T<:AbstractFloat}
+    integral::T
+    error::T
+    points::T
+    volume::T
 end
 
 function Base.show(io::IO, ires::IntermediateResult)

@@ -1,13 +1,28 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
-function no_whitening(dataset::DataSet)::WhiteningResult
+
+function data_whitening{T<:AbstractFloat, I<:Integer}(method::Symbol, dataset::DataSet{T, I})::WhiteningResult{T}
+    local whiteningresult::WhiteningResult
+    if method == :CholeskyWhitening
+        whiteningresult = cholesky_whitening(dataset)
+    elseif method == :StatisticalWhitening
+        whiteningresult = statistical_whitening(dataset)
+    elseif method == :NoWhitening
+        whiteningresult = no_whitening(dataset)
+    else
+        error("Unknown whitening method. Use :CholeskyWhitening, :StatisticalWhitening or :NoWhitening")
+    end
+    return whiteningresult
+end
+
+function no_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
     datamean = Array{Float64}(0)
 
     return transform_data(dataset, eye(dataset.P), datamean)
 end
 
 
-function cholesky_whitening(dataset::DataSet)::WhiteningResult
+function cholesky_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
     datamean = zeros(dataset.P)
 
     for p in eachindex(datamean)
@@ -15,7 +30,7 @@ function cholesky_whitening(dataset::DataSet)::WhiteningResult
     end
 
     for n in 1:dataset.N
-        buffer = view(dataset.data, :, n) - datamean[:]
+        buffer = view(dataset.data, :, n) - datamean
         setindex!(dataset.data, buffer, :, n)
     end
 
@@ -27,16 +42,14 @@ function cholesky_whitening(dataset::DataSet)::WhiteningResult
     return transform_data(dataset, wres, datamean)
 end
 
-function statistical_whitening(dataset::DataSet)::WhiteningResult
+function statistical_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
     datamean = zeros(dataset.P)
 
     for p in eachindex(datamean)
         datamean[p] = mean(view(dataset.data, p, :))
     end
 
-    for n in 1:dataset.N
-        dataset.data[:, n] -= datamean
-    end
+    dataset.data .-= datamean
 
     covmatrix = cov(transpose(dataset.data), FrequencyWeights(dataset.weights), corrected=true)
 
@@ -49,15 +62,15 @@ function statistical_whitening(dataset::DataSet)::WhiteningResult
     return transform_data(dataset, wres, datamean)
 end
 
-function transform_data{T<:AbstractFloat}(dataset::DataSet{T}, W::Matrix{T}, datamean::Vector{T})::WhiteningResult
+function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W::Matrix{T}, datamean::Vector{T})::WhiteningResult{T}
     local determinant::Float64
 
     if W == eye(dataset.P)
         determinant = 1.0
     else
-        buffer = Vector{T}(dataset.P)
+        buffer = deepcopy(dataset.data)
 
-        dataset.data = W * dataset.data
+        Base.A_mul_B!(dataset.data, W, buffer)
 
         determinant = abs(det(W))
     end

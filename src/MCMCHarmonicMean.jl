@@ -11,6 +11,7 @@ using HDF5
 using StatsBase
 using BAT
 using Base.Threads
+using MultiThreadingTools
 
 include("./DataTypes.jl")
 
@@ -39,6 +40,8 @@ export HMIntegrationFastSettings
 export HMIntegrationStandardSettings
 export HMIntegrationMultiThreadingSettings
 export HMIntegrationSettings
+
+export data_whitening
 
 
 end # module
