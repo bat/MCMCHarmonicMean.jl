@@ -2,24 +2,18 @@
 
 export SetLogLevel, SetLogToFileLevel
 export LogLow, Log, LogHigh, LogMedium
-export SetLogFile, SetPriorityLogFile
+export SetLogFile
 
 LogLevel = 1
 LogToFileLevel = 2
 
 LogFile = "Log.txt"
-PriorityLogFile = "Summary.txt"
 
-open(PriorityLogFile, "w") do file
-end
 open(LogFile, "w") do file
 end
 
 function Log(text)
     open(LogFile, "a") do file
-        write(file, text * "\n")
-    end
-    open(PriorityLogFile, "a") do file
         write(file, text * "\n")
     end
     println(text)
@@ -39,11 +33,6 @@ function SetLogFile(path)
     end
 end
 
-function SetPriorityLogFile(path)
-    global PriorityLogFile = path
-    open(PriorityLogFile, "w") do file
-    end
-end
 
 
 function LogLow(info)

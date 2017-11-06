@@ -53,13 +53,12 @@ struct HMIntegrationSettings
     max_startingIDs::Integer
     max_startingIDs_fraction::AbstractFloat
     rect_increase::AbstractFloat
-    use_all_rects::Bool
     stop_ifenoughpoints::Bool
     useMultiThreading::Bool
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, true, false, true)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, true, false, true)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, true, false, true)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, true, true)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, false, true)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, false, true)
 
 """
     WhiteningResult{T<:AbstractFloat}
@@ -163,7 +162,7 @@ Hold the point cloud and the spatial volume for integration.
 
 mutable struct IntegrationVolume{T<:AbstractFloat, I<:Integer}
     pointcloud::PointCloud{T, I}
-    spatialvolume::SpatialVolume{T}
+    spatialvolume::HyperRectVolume{T}
     volume::T
 end
 function Base.show(io::IO, vol::IntegrationVolume)

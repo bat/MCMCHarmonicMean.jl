@@ -57,59 +57,28 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
 
     #dont use mt if one of these options is true
-    use_mt = settings.useMultiThreading && !settings.stop_ifenoughpoints && settings.use_all_rects
+    use_mt = settings.useMultiThreading && !settings.stop_ifenoughpoints
 
+    thread_volumes = Vector{IntegrationVolume{T, I}}(length(centerIDs))
+
+    mutex = Mutex()
+    atomic_centerID = Atomic{I}(1)
 
     if use_mt
-        thread_volumes = Vector{IntegrationVolume{T, I}}(length(centerIDs))
-        atomic_centerID = Atomic{I}(1)
-
         LogHigh("Using $(nthreads()) threads")
-        @everythread hyperrectangle_creationproccess!(thread_volumes, dataset, datatree, volumes, whiteningresult, suggTol, atomic_centerID, centerIDs, settings)
-
-        #get volumes
-        for i in eachindex(thread_volumes)
-            if thread_volumes[i].pointcloud.probfactor == 1.0 || thread_volumes[i].pointcloud.points < dataset.P * 4
-            else
-                push!(volumes, thread_volumes[i])
-                maxPoints = max(maxPoints, thread_volumes[i].pointcloud.points)
-                totalpoints += thread_volumes[i].pointcloud.points
-            end
-        end
+        @everythread hyperrectangle_creationproccess!(thread_volumes, dataset, datatree, volumes, whiteningresult, suggTol, atomic_centerID, centerIDs, settings, mutex)
     else
-        #not threadsafe
-        @showprogress for i in centerIDs
+        hyperrectangle_creationproccess!(thread_volumes, dataset, datatree, volumes, whiteningresult, suggTol, atomic_centerID, centerIDs, settings, mutex)
+    end
 
-            vol = create_hyperrectangle(dataset.data[:, i], datatree, volumes, whiteningresult, suggTol, settings)
-
-            isRectInsideAnother = false
-
-            if !settings.use_all_rects
-                for other in volumes
-                    overlap = calculate_overlapping(vol, other.spatialvolume)
-                    if overlap > 0.75
-                        isRectInsideAnother = true
-                        break
-                    end
-                end, centerIDs::Vector{I}
-            end
-            if isRectInsideAnother
-                LogLow("Hyperrectangle (ID = $i) discarded because it was inside another Rectangle.")
-            elseif vol.pointcloud.probfactor == 1.0 || vol.pointcloud.points < dataset.P * 4
-                LogLow("Hyperrectangle (ID = $i ) discarded because it has not enough Points.\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
-            else
-                push!(volumes, vol)
-                totalpoints += vol.pointcloud.points
-
-                LogMedium("$(length(volumes)). Hyperrectangle (ID = $i ) found. Rectangles discarded: $iterations_skipped\tPoints:\t$(vol.pointcloud.points)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
-                if vol.pointcloud.points > maxPoints
-                    maxPoints = vol.pointcloud.points
-                end
-            end, centerIDs::Vector{I}
-            if settings.stop_ifenoughpoints && totalpoints > 0.5 * dataset.N
-                LogMedium("hyper-rectangle creation process stopped because the created hyper-rectangles have already enough points")
-                break
-            end
+    #get volumes
+    for i in eachindex(thread_volumes)
+        if isassigned(thread_volumes, i) == false
+        elseif thread_volumes[i].pointcloud.probfactor == 1.0 || thread_volumes[i].pointcloud.points < dataset.P * 4
+        else
+            push!(volumes, thread_volumes[i])
+            maxPoints = max(maxPoints, thread_volumes[i].pointcloud.points)
+            totalpoints += thread_volumes[i].pointcloud.points
         end
     end
 
@@ -154,16 +123,15 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     nRes = length(IntResults)
 
-    rectweights = settings.use_all_rects? zeros(nRes) : ones(nRes)
-    if settings.use_all_rects
-        pweights = create_pointweights(dataset, volumes)
-        for i in eachindex(volumes)
-            for id in eachindex(volumes[i].pointcloud.pointIDs)
-                rectweights[i] += 1.0 / pweights[volumes[i].pointcloud.pointIDs[id]]
-            end
+    rectweights = zeros(T, nRes)
+
+    pweights = create_pointweights(dataset, volumes)
+    for i in eachindex(volumes)
+        for id in eachindex(volumes[i].pointcloud.pointIDs)
+            rectweights[i] += 1.0 / pweights[volumes[i].pointcloud.pointIDs[id]]
         end
     end
-    rectnorm = settings.use_all_rects ? sum(rectweights) : nRes
+    rectnorm = sum(rectweights)
 
     result = 0.0
     interror = 0.0
@@ -222,8 +190,8 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
 
     tols = vInc ./ pInc
 
-    sort!(tols, rev=false)
-    suggTol::T = mean(tols[1:round(I, length(tols) * 0.5)])
+    sort!(tols)
+    suggTol::T = mean(tols[round(I, length(tols) * 0.25):round(I, length(tols) * 0.75)])
 
 
     suggTol = sqrt(suggTol - 1) + 1
@@ -235,7 +203,7 @@ end
 
 function hyperrectangle_creationproccess!{T<:AbstractFloat, I<:Integer}(results::Vector{IntegrationVolume{T, I}}, dataset::DataSet{T, I}, datatree::Tree{T, I},
         volumes::Vector{IntegrationVolume{T, I}}, whiteningresult::WhiteningResult{T},
-        tolerance::T, atomic_centerID::Atomic{I}, centerIDs::Vector{I}, settings::HMIntegrationSettings)
+        tolerance::T, atomic_centerID::Atomic{I}, centerIDs::Vector{I}, settings::HMIntegrationSettings, mutex::Mutex)
 
     while true
         #get new center ID
@@ -245,7 +213,25 @@ function hyperrectangle_creationproccess!{T<:AbstractFloat, I<:Integer}(results:
         end
         id = centerIDs[idc]
 
-        results[idc] = create_hyperrectangle(dataset.data[:, id], datatree, volumes, whiteningresult, tolerance, settings)
+        center = dataset.data[:, id]
+        inV = false
+
+        lock(mutex) do
+            #check if starting id is inside another rectangle
+            for i in eachindex(results)
+                if isassigned(results, i)
+                    if BAT.in(center, results[i].spatialvolume)
+                        inV = true
+                        break
+                    end
+                end
+            end
+        end
+
+        if inV
+            continue
+        end
+        results[idc] = create_hyperrectangle(center, datatree, volumes, whiteningresult, tolerance, settings)
     end
 end
 
@@ -332,21 +318,6 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
     while wasCubeChanged && vol.pointcloud.probfactor > 1.0
 
         wasCubeChanged = false
-
-        isRectInsideAnother = false
-
-        if !settings.use_all_rects
-            for other in volumes
-                if calculate_overlapping(vol, other.spatialvolume) > 0.75
-                    isRectInsideAnother = true
-                    break
-                end
-            end
-        end
-
-        if isRectInsideAnother
-            return vol
-        end
 
 
         for p::I = 1:datatree.P
