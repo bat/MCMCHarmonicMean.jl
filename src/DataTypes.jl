@@ -54,11 +54,12 @@ struct HMIntegrationSettings
     max_startingIDs_fraction::AbstractFloat
     rect_increase::AbstractFloat
     stop_ifenoughpoints::Bool
+    skip_centerIDsinsideHyperRects::Bool
     useMultiThreading::Bool
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, true, true)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, false, true)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, false, true)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, true, true, true)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, false, true, true)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, false, false, true)
 
 """
     WhiteningResult{T<:AbstractFloat}

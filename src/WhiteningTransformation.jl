@@ -68,9 +68,7 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
     if W == eye(dataset.P)
         determinant = 1.0
     else
-        buffer = deepcopy(dataset.data)
-
-        Base.A_mul_B!(dataset.data, W, buffer)
+        dataset.data = W * dataset.data
 
         determinant = abs(det(W))
     end

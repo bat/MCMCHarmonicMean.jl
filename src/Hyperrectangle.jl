@@ -33,7 +33,7 @@ end
 end
 
 """
-    find_hypercube_centers(dataset::DataSet, datatree::Tree, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{I}
+    find_hypercube_centers(dataset::DataSet{T, I}, datatree::Tree, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{I}
 
 finds possible starting points for the hyperrectangle creation
 """
@@ -47,7 +47,7 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
 
     ignorePoint = falses(dataset.N)
 
-    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], datatree, max(round(I, dataset.N * 0.001), dataset.P * 10))
+    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, datatree, max(round(I, dataset.N * 0.001), dataset.P * 10))
 
     @showprogress for n::I in sortLogProb[1:NMax]
         if ignorePoint[n]
@@ -59,7 +59,7 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
         weights[n] = dataset.logprob[n]
 
         cubevol =  HyperCubeVolume(dataset.data[:, n], testlength)
-        cube = IntegrationVolume(datatree, cubevol, true)
+        cube = IntegrationVolume(dataset, datatree, cubevol, true)
         for id::I in cube.pointcloud.pointIDs
             ignorePoint[id] = true
         end
@@ -101,19 +101,19 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
     return sortIdx[1:NMax]
 end
 
-function find_density_test_cube_edgelength{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, datatree::Tree{T, I}, points::I = 100)
-    return find_density_test_cube(mode, datatree, points)[1]
+function find_density_test_cube_edgelength{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, dataset::DataSet{T, I}, datatree::Tree{T, I}, points::I = 100)
+    return find_density_test_cube(mode, dataset, datatree, points)[1]
 end
 
-function find_density_test_cube{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, datatree::Tree{T, I}, points::I)
-    P = datatree.P
+function find_density_test_cube{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, dataset::DataSet{T, I}, datatree::Tree{T, I}, points::I)
+    P = dataset.P
 
     l::T = 1.0
     tol::T = 1.0
     mult::T = 1.2^(1.0 / P)
 
     rect = HyperCubeVolume(mode, l)
-    intvol = IntegrationVolume(datatree, rect, false)
+    intvol = IntegrationVolume(dataset, datatree, rect, false)
     pt = intvol.pointcloud.points
 
     while pt < points / tol || pt > points * tol
@@ -124,7 +124,7 @@ function find_density_test_cube{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, d
             l *= mult
         end
         HyperCubeVolume!(rect, mode, l)
-        IntegrationVolume!(intvol, datatree, rect, false)
+        IntegrationVolume!(intvol, dataset, datatree, rect, false)
         pt = intvol.pointcloud.points
     end
 

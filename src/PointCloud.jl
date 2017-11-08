@@ -2,15 +2,15 @@
 
 
 """
-    PointCloud(datatree::Tree, hyperrect::HyperRectVolume, searchpts::Bool = false)::PointCloud
+    PointCloud{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, hyperrect::HyperRectVolume{T}, searchpts::Bool = false)::PointCloud
 
 creates a point cloud by searching the data tree for points which are inside the hyper-rectangle
 The parameter searchpts determines if an array of the point IDs is created as well
 """
-function PointCloud(datatree::Tree, hyperrect::HyperRectVolume, searchpts::Bool)::PointCloud
+function PointCloud{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, hyperrect::HyperRectVolume{T}, searchpts::Bool)::PointCloud
     result = PointCloud()
 
-    PointCloud!(result, datatree, hyperrect, searchpts)
+    PointCloud!(result, dataset, datatree, hyperrect, searchpts)
     return result
 end
 
@@ -18,9 +18,9 @@ function PointCloud()::PointCloud
     return PointCloud(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, Array{Int64}(0))
 end
 
-function PointCloud!{T<:AbstractFloat, I<:Integer}(cloud::PointCloud{T, I}, datatree::Tree{T}, hyperrect::HyperRectVolume{T}, searchpts::Bool)
+function PointCloud!{T<:AbstractFloat, I<:Integer}(cloud::PointCloud{T, I}, dataset::DataSet{T, I}, datatree::Tree{T}, hyperrect::HyperRectVolume{T}, searchpts::Bool)
 
-    res = search(datatree, hyperrect, searchpts)
+    res = search(dataset, datatree, hyperrect, searchpts)
 
     cloud.points = res.points
 
