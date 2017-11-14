@@ -67,8 +67,8 @@ function resize_integrationvol!{T<:AbstractFloat, I<:Integer}(result::Integratio
     end
 
 
-    res = search(dataset, datatree, searchVol, searchpts)
     if increase
+        res = search(dataset, datatree, searchVol, searchpts)
 
         result.pointcloud.points = original.pointcloud.points + res.points
 
@@ -83,12 +83,30 @@ function resize_integrationvol!{T<:AbstractFloat, I<:Integer}(result::Integratio
         result.pointcloud.maxWeightProb = max(original.pointcloud.maxWeightProb, res.maxWeightProb)
         result.pointcloud.minWeightProb = max(original.pointcloud.minWeightProb, res.minWeightProb)
     else
-        result.pointcloud.points = original.pointcloud.points - res.points
-
-        if searchpts
-            newids = search(dataset, datatree, newrect, searchpts).pointIDs
-            resize!(result.pointcloud.pointIDs, result.pointcloud.points)
-            copy!(result.pointcloud.pointIDs, newids)
+        if searchpts && original.pointcloud.points == original
+            resize!(result.pointcloud.pointIDs, original.pointcloud.points)
+            copy!(result.pointcloud.pointIDs, original.pointcloud.pointIDs)
+            for i in eachindex(result.pointcloud.pointIDs)
+                id = result.pointcloud.pointIDs[i]
+                inV=true
+                for p = 1:dataset.P
+                    if dataset.data[p, id] < newrect.lo[p] || dataset.data[p, id] > newrect.hi[p]
+                        inV=false
+                        break
+                    end
+                end
+                if !inV
+                    deleteat!(result.pointcloud.pointIDs, i)
+                end
+            end
+        else
+            res = search(dataset, datatree, searchVol, searchpts)
+            result.pointcloud.points = original.pointcloud.points - res.points
+            if searchpts
+                newids = search(dataset, datatree, newrect, searchpts).pointIDs
+                resize!(result.pointcloud.pointIDs, result.pointcloud.points)
+                copy!(result.pointcloud.pointIDs, newids)
+            end
         end
     end
 

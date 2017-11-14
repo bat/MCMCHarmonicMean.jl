@@ -67,7 +67,6 @@ HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhit
 Stores the information obtained during the Whitening Process
 # Variables
 - 'determinant::T' : The determinant of the whitening matrix
-- 'logprobdiff::T' : The log. probability difference between the most probable and least probable sample
 - 'targetprobfactor::T' : The suggested target probability factor
 - 'whiteningmatrix::Matrix{T}' : The whitening matrix
 - 'meanvalue::Vector{T}' : the mean vector of the input data
@@ -75,7 +74,6 @@ Stores the information obtained during the Whitening Process
 
 struct WhiteningResult{T<:AbstractFloat}
     determinant::T
-    logprobdiff::T
     targetprobfactor::T
     whiteningmatrix::Matrix{T}
     meanvalue::Vector{T}

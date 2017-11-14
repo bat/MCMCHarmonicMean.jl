@@ -74,17 +74,12 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
     end
 
     LogMedium("Calculate Optimal Target Probability")
-    sortids = sortperm(dataset.logprob, rev=true)
-    maxP = dataset.logprob[sortids[1]]
-    minP = dataset.logprob[sortids[end]]
-
-    suggTargetProb = dataset.logprob[sortids[floor(Int64, dataset.N * 0.9)]]
+    maxP = select(dataset.logprob, dataset.N)
+    suggTargetProb = select(dataset.logprob, floor(Int64, dataset.N * 0.1))
     suggTargetProb = exp(maxP - suggTargetProb)
-    #suggTargetProb = min(100, exp(maxP - suggTargetProb))
 
     LogMedium("Determinant:\t" * string(determinant))
     LogMedium("Suggested Target Probability Factor:\t" * string(suggTargetProb))
-    LogMedium("Maximum Probability Factor:\t" * string(exp(maxP - minP)))
 
-    return WhiteningResult(determinant, maxP-minP, suggTargetProb, W, datamean)
+    return WhiteningResult(determinant, suggTargetProb, W, datamean)
 end

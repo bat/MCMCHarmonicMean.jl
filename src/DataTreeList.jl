@@ -197,14 +197,14 @@ end
 
 
 function searchInterval!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, dataset::DataSet{T, I}, datatree::Tree{T, I}, searchvol::HyperRectVolume{T}, start::I, stop::I, searchpoints::Bool)
-    dimsort::I = datatree.DimensionList[datatree.RecursionDepth]
+    dimsort = datatree.DimensionList[datatree.RecursionDepth]
 
-    for i::I = start:stop
+    for i = start:stop
         if dataset.data[dimsort, i] > searchvol.hi[dimsort]
             break
         end
         inVol = true
-        for p::I = 1:dataset.P
+        for p = 1:dataset.P
             if dataset.data[p, i] < searchvol.lo[p] || dataset.data[p, i] > searchvol.hi[p]
                 inVol = false
                 break
