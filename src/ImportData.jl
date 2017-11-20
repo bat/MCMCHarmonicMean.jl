@@ -69,7 +69,7 @@ function loadhdf5(T::DataType, path::String, params::Array{String}, range)::Data
     newLogProb = LogProbability[uniqueID]
     newWeights = weights[uniqueID]
 
-    result = DataSet{T}(newData, newLogProb, newWeights, N - removedPoints, P)
+    result = DataSet(newData, newLogProb, newWeights, N - removedPoints, P)
 
     return result
 end

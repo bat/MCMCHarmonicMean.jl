@@ -20,6 +20,7 @@ function hm_integrate(bat_input::Tuple{DensitySampleVector, MCMCSampleIDVector, 
     hm_integrate(bat_input[1], range = range, settings = settings)
 end
 
+
 function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; range = Colon(), settings::HMIntegrationSettings = HMIntegrationStandardSettings())::IntegrationResult
     if dataset.N < dataset.P * 50
         error("Not enough points for integration")
@@ -27,9 +28,9 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     if range != Colon()
         dataset.N = length(range)
-        resize!(dataset.data, dataset.N)
-        resize!(dataset.weights, dataset.N)
-        resize!(dataset.logprob, dataset.N)
+        dataset.data = dataset.data[:, 1:dataset.N]
+        dataset.weights = dataset.weights[1:dataset.N]
+        dataset.logprob = dataset.logprob[1:dataset.N]
     end
 
     LogHigh("Integration started. Data Points:\t$(dataset.N)\tParameters:\t$(dataset.P)")
@@ -97,6 +98,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     progressbar = Progress(length(nRes))
     if settings.useMultiThreading
         @threads for i in 1:nRes
+            #IntResults[i] = integrate_hyperrectangle(dataset, datatree, volumes[i], whiteningresult.determinant)
             IntResults[i] = integrate_hyperrectangle_noerror(dataset, volumes[i], whiteningresult.determinant)
             lock(mutex) do
                 next!(progressbar)
@@ -105,6 +107,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         end
     else
         for i in 1:nRes
+            #IntResults[i] = integrate_hyperrectangle(dataset, datatree, volumes[i], whiteningresult.determinant)
             IntResults[i] = integrate_hyperrectangle_noerror(dataset, volumes[i], whiteningresult.determinant)
             LogMedium("$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)")
             next!(progressbar)
@@ -482,8 +485,8 @@ function integrate_hyperrectangle_noerror{T<:AbstractFloat, I<:Integer}(dataset:
     return IntermediateResult(T(integral), T(0), T(integrationvol.pointcloud.points), integrationvol.volume)
 end
 
-function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, integrationvol::IntegrationVolume{T, I}, determinant::T)::IntermediateResult
-    Results = Array{IntermediateResult, 1}(13)
+function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, integrationvol::IntegrationVolume{T, I}, determinant::T)::IntermediateResult{T}
+    Results = Array{IntermediateResult, 1}(5)
     nIntegrals = Float64(length(Results))
 
     #start 10% larger, stop 10% smaller
@@ -495,7 +498,7 @@ function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet
         margin = integrationvol.spatialvolume.hi[p] - integrationvol.spatialvolume.lo[p]
         integrationvol.spatialvolume.lo[p] -= margin * 0.5 * volfactor
         integrationvol.spatialvolume.hi[p] += margin * 0.5 * volfactor
-        step[p] = margin * 0.5 * volfactor / 12
+        step[p] = margin * 0.5 * volfactor / 4
     end
 
     IntegrationVolume!(integrationvol, dataset, datatree, integrationvol.spatialvolume, true)
@@ -507,7 +510,7 @@ function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet
             integrationvol.spatialvolume.lo[p] += step[p]
             integrationvol.spatialvolume.hi[p] -= step[p]
         end
-        IntegrationVolume!(integrationvol, dataset, datatree, integrationvol.spatialvolume, true)
+        shrink_integrationvol!(integrationvol, dataset, integrationvol.spatialvolume)
         Results[i + 1] = integrate_hyperrectangle_noerror(dataset, integrationvol, determinant)
     end
 

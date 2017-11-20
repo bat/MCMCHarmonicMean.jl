@@ -31,23 +31,22 @@ function create_search_tree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}
     CutList = Vector{T}(0)
 
     if recDepth > 0
-        createSearchTree(dataset, DimensionList, CutList, Cuts, Leafsize, 1)
+        createleafs(dataset, DimensionList, CutList, Cuts, Leafsize, 1)
     end
 
     return Tree(Cuts, Leafsize, DimensionList, length(DimensionList), CutList)
 end
 
-function createSearchTree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, DimensionList::Vector{I}, CutList::Vector{T}, Cuts::I, Leafsize::I, StartID::I = 0)
+function createleafs{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, DimensionList::Vector{I}, CutList::Vector{T}, Cuts::I, Leafsize::I, StartID::I = 0)
     remainingRec::I = length(DimensionList)
 
-    stopMax::I = dataset.N
     thisLeaf::I = Leafsize * Cuts^(remainingRec - 1)
     bigLeaf::I = Leafsize * Cuts^remainingRec
 
     startInt::I = StartID
     stopInt::I = StartID + bigLeaf - 1
-    if stopInt > stopMax
-        stopInt = stopMax
+    if stopInt > dataset.N
+        stopInt = dataset.N
     end
 
     sortID = sortperm(dataset.data[DimensionList[1], startInt:stopInt])
@@ -61,20 +60,20 @@ function createSearchTree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, 
         stop::I = StartID - 1
 
         for i = 1:Cuts
-            if stop == stopMax
+            if stop == dataset.N
                 continue
             end
 
             start = stop + 1
             stop += thisLeaf
-            if stop > stopMax
-                stop = stopMax
+            if stop > dataset.N
+                stop = dataset.N
             end
 
             push!(CutList, dataset.data[DimensionList[1], start])
 
             if remainingRec > 1
-                createSearchTree(dataset, DimensionList[2:end], CutList, Cuts, Leafsize, start)
+                createleafs(dataset, DimensionList[2:end], CutList, Cuts, Leafsize, start)
             end
         end
     end
