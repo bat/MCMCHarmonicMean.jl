@@ -43,5 +43,7 @@ export HMIntegrationSettings
 
 export data_whitening
 
+export IntegrationResult
+export IntegrationVolume
 
 end # module

@@ -20,8 +20,19 @@ mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     N::I
     P::I
 end
-function DataSet{T<:Real}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
-    return DataSet(data, logprob, weights, size(data)[2], size(data)[1])
+
+function DataSet(data::Tuple{DensitySampleVector, MCMCSampleIDVector, MCMCBasicStats})
+    return DataSet(data[1])
+end
+function DataSet(data::BAT.DensitySampleVector)
+    T = typeof(data.params[1,1])
+    return DataSet(
+        convert(Matrix{T}, data.params),
+        convert(Vector{T}, data.log_value),
+        convert(Vector{T}, data.weight))
+end
+function DataSet{T<:AbstractFloat}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
+    return DataSet{T, Int64}(data, logprob, weights, size(data)[2], size(data)[1])
 end
 
 function Base.show(io::IO, data::DataSet)
@@ -195,6 +206,7 @@ struct IntegrationResult{T<:AbstractFloat, I<:Integer}
     volume::T
     volumelist::Vector{IntegrationVolume{T, I}}
     startingIDs::Vector{I}
+    tolerance::T
     whiteningresult::WhiteningResult{T}
 end
 

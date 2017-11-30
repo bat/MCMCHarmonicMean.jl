@@ -75,8 +75,8 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
 
     LogMedium("Calculate Optimal Target Probability")
     maxP = select(dataset.logprob, dataset.N)
-    suggTargetProb = select(dataset.logprob, floor(Int64, dataset.N * 0.1))
-    suggTargetProb = exp(maxP - suggTargetProb)
+    suggTargetProb = select(dataset.logprob, floor(Int64, dataset.N * 0.5))
+    suggTargetProb = 10 * exp(maxP - suggTargetProb)
 
     LogMedium("Determinant:\t" * string(determinant))
     LogMedium("Suggested Target Probability Factor:\t" * string(suggTargetProb))

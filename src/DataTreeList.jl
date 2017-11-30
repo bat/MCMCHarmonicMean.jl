@@ -119,7 +119,7 @@ function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, datas
                     push!(result.pointIDs, n)
                 end
                 prob = dataset.logprob[n]
-                w = dataset.weights[n]
+                w = log(dataset.weights[n]) + prob
                 result.maxLogProb = max(result.maxLogProb, prob)
                 result.minLogProb = min(result.minLogProb, prob)
                 result.maxWeightProb = max(result.maxWeightProb, w)
@@ -217,7 +217,7 @@ function searchInterval!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I
                 push!(result.pointIDs, i)
             end
             prob = dataset.logprob[i]
-            w = dataset.weights[i]
+            w = log(dataset.weights[i]) + prob
             result.maxLogProb = max(result.maxLogProb, prob)
             result.minLogProb = min(result.minLogProb, prob)
             result.maxWeightProb = max(result.maxWeightProb, w)
