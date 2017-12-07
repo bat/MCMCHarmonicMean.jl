@@ -158,11 +158,11 @@ end
 
 
 function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, centerIDs::Vector{I}, ntestcubes::I)::T
-    pts = 10 * dataset.P
+    pts = round(I, 0.001 * dataset.N)
     ntestpts = [2, 4, 8] * pts
 
-    vInc = Vector{T}(ntestcubes * 4)
-    pInc = Vector{T}(ntestcubes * 4)
+    vInc = Vector{T}(ntestcubes * (length(ntestpts) + 1))
+    pInc = Vector{T}(ntestcubes * (length(ntestpts) + 1))
 
     cntr = 1
     for id = 1:ntestcubes
@@ -189,7 +189,7 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
     tols = vInc ./ pInc
 
     sort!(tols, rev = true)
-    suggTol::T = mean(tols[round(I, round(I, length(tols) * 0.25)):round(I, round(I, length(tols) * 0.75))])
+    suggTol::T = mean(tols[round(I, round(I, length(tols) * 0.33)):round(I, round(I, length(tols) * 0.67))])
     suggTol = suggTol < 1.025 ? 1.1 : (suggTol - 1) * 4 + 1
     LogMedium("Sugg. Tolerance: $suggTol")
 

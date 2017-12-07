@@ -54,15 +54,12 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
             continue
         end
 
-        mode = view(dataset.data, :, n)
-
         weights[n] = dataset.logprob[n]
 
-        cubevol =  HyperCubeVolume(dataset.data[:, n], testlength)
+        cubevol = HyperCubeVolume(dataset.data[:, n], testlength)
         cube = IntegrationVolume(dataset, datatree, cubevol, true)
-        for id::I in cube.pointcloud.pointIDs
-            ignorePoint[id] = true
-        end
+
+        ignorePoint[cube.pointcloud.pointIDs] = true
     end
 
     sortIdx = sortperm(weights, rev = true)
