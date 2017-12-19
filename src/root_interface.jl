@@ -9,12 +9,12 @@ using ProgressMeter
 function root2hdf5(T::DataType, path::String; params::Array{String} = Array{String}(0), range = Colon(), treename::String = "")
     if treename == ""
         treename = convert(String, split(split(path, ".")[1], "/")[end])
-        info("Tree name: $treename")
+        @log_msg LOG_INFO "Tree name: $treename"
     end
 
     if length(params) == 0
         params = read_params(path, treename)
-        info("Parameter names: $params")
+        @log_msg LOG_INFO "Parameter names: $params"
     end
 
     filename_hdf5 = path[1:end-5] * ".h5"
@@ -57,7 +57,7 @@ function root2hdf5(T::DataType, path::String; params::Array{String} = Array{Stri
             @showprogress for j in eachindex(valnames, hdf5_arrays)
                 #check for constants
                 if max(hdf5_arrays[j]) == min(hdf5_arrays[j])
-                    info("Skipping constant $(valnames[j])")
+                    @log_msg LOG_INFO "Skipping constant $(valnames[j])"
                 end
 
                 file[string(valnames[j]), dsargs...] = hdf5_arrays[j]

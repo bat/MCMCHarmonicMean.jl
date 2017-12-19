@@ -22,7 +22,7 @@ function loadhdf5(T::DataType, path::String, params::Array{String}, range)::Data
     data_1st = file[params[1]][range]
     N = length(data_1st)
     P = length(params)
-    LogHigh("File $path \thas $N data points with $P parameters")
+    @log_msg LOG_INFO "File $path \thas $N data points with $P parameters"
     data = Matrix{T}(P, N)
     data[1, :] = data_1st
     @showprogress for i in 2:length(params)
@@ -32,7 +32,7 @@ function loadhdf5(T::DataType, path::String, params::Array{String}, range)::Data
     #LogLikelihood = file["LogLikelihood"][range]
     Chain = convert(Array{Int64, 1}, file["Chain"][range])
 
-    LogMedium("Finding Duplicates")
+    @log_msg LOG_DEBUG "Finding Duplicates to generate weighted samples"
     chains = 1
     for i in Chain
         if i > chains
@@ -64,7 +64,7 @@ function loadhdf5(T::DataType, path::String, params::Array{String}, range)::Data
         end
     end
 
-    LogHigh("Deleted $removedPoints Duplicates")
+    @log_msg LOG_INFO "$removedPoints Duplicates found."
     newData = data[:, uniqueID]
     newLogProb = LogProbability[uniqueID]
     newWeights = weights[uniqueID]

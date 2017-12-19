@@ -11,8 +11,6 @@ mutable struct Tree{T<:AbstractFloat, I<:Integer}
 end
 
 function create_search_tree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, MinCuts::I = 8, MaxLeafsize::I = 200)::Tree{T, I}
-    LogMedium("Create Search Tree")
-
     suggCuts = (dataset.N / MaxLeafsize)^(1.0 / dataset.P)
     Cuts = ceil(I, max(MinCuts, suggCuts))
 
@@ -27,7 +25,7 @@ function create_search_tree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}
     end
 
     Leafsize = ceil(I, dataset.N / Cuts^recDepth)
-    LogMedium("Cuts $Cuts\tLeafsize $Leafsize\tRec. Depth $recDepth")
+    @log_msg LOG_DEBUG "Cuts $Cuts\tLeafsize $Leafsize\tRec. Depth $recDepth"
     CutList = Vector{T}(0)
 
     if recDepth > 0

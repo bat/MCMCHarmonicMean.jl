@@ -78,7 +78,7 @@ function resize_integrationvol!{T<:AbstractFloat, I<:Integer}(result::Integratio
             searchVol.hi[changed_dim] = original.spatialvolume.hi[changed_dim]
             searchVol.lo[changed_dim] = newrect.hi[changed_dim]
         else
-            error("resize_integrationvol(): Volume didn't change.")
+            @log_msg LOG_ERROR "resize_integrationvol(): Volume didn't change."
         end
     end
 

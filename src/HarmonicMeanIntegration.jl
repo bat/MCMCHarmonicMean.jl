@@ -16,7 +16,7 @@ function hm_integrate(bat_input::Tuple{DensitySampleVector, MCMCSampleIDVector, 
 end
 function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; range = Colon(), settings::HMIntegrationSettings = HMIntegrationStandardSettings())::IntegrationResult
     if dataset.N < dataset.P * 50
-        error("Not enough points for integration")
+        @log_msg LOG_ERROR "Not enough points for integration"
     end
 
     if range != Colon()
@@ -26,27 +26,31 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         dataset.logprob = dataset.logprob[1:dataset.N]
     end
 
-    LogHigh("Integration started. Data Points:\t$(dataset.N)\tParameters:\t$(dataset.P)")
-    LogHigh("Data Whitening")
+    @log_msg LOG_INFO "Integration started. Data Points:\t$(dataset.N)\tParameters:\t$(dataset.P)"
 
+    @log_msg LOG_INFO "Data Whitening started."
     whiteningresult = data_whitening(settings.whitening_method, dataset)
+    @log_msg LOG_DEBUG "Whitening Result: $(whiteningresult)"
 
-    LogHigh("Create Data Tree")
+
+    @log_msg LOG_INFO "Create Data Tree"
     datatree = create_search_tree(dataset)
+    @log_msg LOG_DEBUG "Search Tree: $datatree"
 
-    LogHigh("Find possible Hyperrectangle Centers")
+    @log_msg LOG_INFO "Find possible Hyperrectangle Centers"
     centerIDs = find_hypercube_centers(dataset, datatree, whiteningresult, settings)
     volumes = Vector{IntegrationVolume{T, I}}(0)
 
-    LogHigh("Find good tolerances for Hyperrectangle Creation")
-    suggTol = findtolerance(dataset, datatree, centerIDs, 10)
-
+    @log_msg LOG_INFO "Find good tolerances for Hyperrectangle Creation"
+    suggTolPts = dataset.N > 1e5 ? round(I, 0.001 * dataset.N) : suggTolPts = round(I, 0.01 * dataset.N)
+    suggTol = findtolerance(dataset, datatree, centerIDs, 10, suggTolPts)
+    @log_msg LOG_DEBUG "Tolerance: $suggTol"
     maxPoints::I = 0
     totalpoints::I = 0
 
     use_mt = settings.useMultiThreading && !settings.stop_ifenoughpoints
     nt = use_mt ? nthreads() : 1
-    LogHigh("Create Hyperrectangles using $(nt) thread(s)")
+    @log_msg LOG_INFO "Create Hyperrectangles using $nt thread(s)"
 
     thread_volumes = Vector{IntegrationVolume{T, I}}(length(centerIDs))
 
@@ -82,7 +86,8 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         j -= 1
     end
 
-    LogHigh("Integrate Hyperrectangle")
+
+    @log_msg LOG_INFO "Integrating Hyperrectangles"
 
     nRes = length(volumes)
     IntResults = Array{IntermediateResult, 1}(nRes)
@@ -91,18 +96,16 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     progressbar = Progress(length(nRes))
     if settings.useMultiThreading
         @threads for i in 1:nRes
-            #IntResults[i] = integrate_hyperrectangle(dataset, datatree, volumes[i], whiteningresult.determinant)
             IntResults[i] = integrate_hyperrectangle_noerror(dataset, volumes[i], whiteningresult.determinant)
             lock(mutex) do
                 next!(progressbar)
-                LogMedium("$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)")
             end
+            @log_msg LOG_DEBUG "$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)"
         end
     else
         for i in 1:nRes
-            #IntResults[i] = integrate_hyperrectangle(dataset, datatree, volumes[i], whiteningresult.determinant)
             IntResults[i] = integrate_hyperrectangle_noerror(dataset, volumes[i], whiteningresult.determinant)
-            LogMedium("$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)")
+            @log_msg LOG_DEBUG "$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)"
             next!(progressbar)
         end
     end
@@ -134,14 +137,14 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     result = 0.0
     interror = 0.0
     points = 0.0
-    volume = 0.0
-    #normerror = 0.0
+    volume = 0.
+
     for i = 1:nRes
         result += IntResults[i].integral * rectweights[i] / rectnorm
         points += IntResults[i].points * rectweights[i] / rectnorm
         volume += IntResults[i].volume * rectweights[i] / rectnorm
     end
-    #result /= normerror
+
     for i in 1:nRes
         interror += (IntResults[i].integral - result)^2
     end
@@ -151,14 +154,13 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         interror = IntResults[1].interror
     end
 
-    LogHigh("Integration Result:\t $result +- $interror\nRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume")
+    @log_msg LOG_INFO "Integration Result:\t $result +- $interror\nRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume"
     return IntegrationResult(result, interror, nRes, points, volume, volumes, centerIDs, suggTol, whiteningresult)
 end
 
 
 
-function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, centerIDs::Vector{I}, ntestcubes::I)::T
-    pts = round(I, 0.001 * dataset.N)
+function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, centerIDs::Vector{I}, ntestcubes::I, pts::I)::T
     ntestpts = [2, 4, 8] * pts
 
     vInc = Vector{T}(ntestcubes * (length(ntestpts) + 1))
@@ -188,10 +190,18 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
 
     tols = vInc ./ pInc
 
-    sort!(tols, rev = true)
-    suggTol::T = mean(tols[round(I, round(I, length(tols) * 0.33)):round(I, round(I, length(tols) * 0.67))])
-    suggTol = suggTol < 1.025 ? 1.1 : (suggTol - 1) * 4 + 1
-    LogMedium("Sugg. Tolerance: $suggTol")
+    i = length(tols)
+    while i > 0
+        if isnan(tols[i]) || isinf(tols[i])
+            deleteat!(tols, i)
+        end
+        i -= 1
+    end
+
+    suggTol::T = mean(tols)
+    suggTol = (suggTol - 1) * 4 + 1
+
+    @log_msg LOG_DEBUG "Suggested Tolerance: $suggTol"
 
     return suggTol
 end
@@ -232,9 +242,7 @@ function hyperrectangle_creationproccess!{T<:AbstractFloat, I<:Integer}(results:
             continue
         end
         results[idc] = create_hyperrectangle(center, dataset, datatree, volumes, whiteningresult, tolerance, settings)
-        lock(mutex) do
-            LogMedium("Hyperrectangle created. Points:\t$(results[idc].pointcloud.points)\tVolume:\t$(results[idc].volume)\tProb. Factor:\t$(results[idc].pointcloud.probfactor)")
-        end
+        @log_msg LOG_DEBUG "Hyperrectangle created. Points:\t$(results[idc].pointcloud.points)\tVolume:\t$(results[idc].volume)\tProb. Factor:\t$(results[idc].pointcloud.probfactor)"
     end
 end
 
@@ -349,7 +357,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                     wasCubeChanged = true
                     change = true
                     change1 = true
-                    #LogLow("\tTEST lo inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease")
+                    @log_msg LOG_TRACE "lo inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                 else
                     #revert changes
                     spvol.lo[p] = buffer
@@ -368,7 +376,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                         wasCubeChanged = true
                         change = true
                         change1 = true
-                        #LogLow("\tTEST lo dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease")
+                        @log_msg LOG_TRACE "lo dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                     else
                         #revert changes
                         spvol.lo[p] = buffer
@@ -393,7 +401,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                     wasCubeChanged = true
                     change = true
                     change2 = true
-                    #LogLow("\tTEST up inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease")
+                    @log_msg LOG_TRACE "up inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                 else
                     #revert changes
                     spvol.hi[p] = buffer
@@ -412,7 +420,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                         wasCubeChanged = true
                         change = true
                         change2 = true
-                        #LogLow("\tTEST up dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease")
+                        @log_msg LOG_TRACE "up dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                     else
                         #revert changes
                         spvol.hi[p] = buffer
@@ -476,7 +484,7 @@ function integrate_hyperrectangle_noerror{T<:AbstractFloat, I<:Integer}(dataset:
 
     integral = sum(dataset.weights) * integrationvol.volume / s / determinant / exp(-integrationvol.pointcloud.maxLogProb)
 
-    LogLow("\tVolume:\t$(integrationvol.volume)\tIntegral: $integral\tPoints:\t$(count)")
+    @log_msg LOG_TRACE "Volume:\t$(integrationvol.volume)\tIntegral: $integral\tPoints:\t$(count)"
 
     return IntermediateResult(T(integral), T(0), T(integrationvol.pointcloud.points), integrationvol.volume)
 end
@@ -526,7 +534,7 @@ function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet
 
     if isnan(integral) || integral == Inf || integral == -Inf
         res = integrate_hyperrectangle_noerror(dataset, integrationvol, determinant)
-        LogMedium("No error could be calculated for integrate_hyperrectangle()")
+        @log_msg LOG_ERROR "No error could be calculated for integrate_hyperrectangle()"
         return IntermediateResult(res.integral, 0.0, res.points, integrationvol.volume)
     end
 

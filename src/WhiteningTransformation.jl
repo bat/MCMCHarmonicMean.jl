@@ -10,7 +10,7 @@ function data_whitening{T<:AbstractFloat, I<:Integer}(method::Symbol, dataset::D
     elseif method == :NoWhitening
         whiteningresult = no_whitening(dataset)
     else
-        error("Unknown whitening method. Use :CholeskyWhitening, :StatisticalWhitening or :NoWhitening")
+        @log_msg LOG_ERROR "Unknown whitening method. Use :CholeskyWhitening, :StatisticalWhitening or :NoWhitening"
     end
     return whiteningresult
 end
@@ -73,13 +73,12 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
         determinant = abs(det(W))
     end
 
-    LogMedium("Calculate Optimal Target Probability")
     maxP = select(dataset.logprob, dataset.N)
     suggTargetProb = select(dataset.logprob, floor(Int64, dataset.N * 0.5))
     suggTargetProb = 10 * exp(maxP - suggTargetProb)
 
-    LogMedium("Determinant:\t" * string(determinant))
-    LogMedium("Suggested Target Probability Factor:\t" * string(suggTargetProb))
+    @log_msg LOG_DEBUG "Determinant:\t" * string(determinant)
+    @log_msg LOG_DEBUG "Suggested Target Probability Factor:\t" * string(suggTargetProb)
 
     return WhiteningResult(determinant, suggTargetProb, W, datamean)
 end

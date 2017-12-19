@@ -89,11 +89,11 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
     if NMax < 10 && stop >= 10
         NMax = 10
     elseif NMax < 10 && stop < 10
-        LogMedium("Returned minimum number of starting points: 10")
+        @log_msg LOG_WARNING "Returned minimum number of starting points: 10"
         return sortLogProb[1:10]
     end
 
-    LogMedium("Possible Hypersphere Centers: $NMax out of $(dataset.N) points")
+    @log_msg LOG_DEBUG "Possible Hypersphere Centers: $NMax out of $(dataset.N) points"
 
     return sortIdx[1:NMax]
 end
@@ -107,18 +107,29 @@ function find_density_test_cube{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, d
 
     l::T = 1.0
     tol::T = 1.0
-    mult::T = 1.2^(1.0 / P)
+    mult::T = 2.0^(1.0 / P)
+    last_change = 0
 
     rect = HyperCubeVolume(mode, l)
     intvol = IntegrationVolume(dataset, datatree, rect, false)
     pt = intvol.pointcloud.points
 
+    iterations = 0
     while pt < points / tol || pt > points * tol
-        tol += 0.001
+        iterations += 1
+        tol += 0.0001 * 2.0^iterations
         if pt > points
             l /= mult
+            if last_change == -1
+                mult = mult^P
+            end
+            last_change = -1
         else
             l *= mult
+            if last_change == 1
+                mult = mult^(1.0 / P)
+            end
+            last_change = 1
         end
         HyperCubeVolume!(rect, mode, l)
         IntegrationVolume!(intvol, dataset, datatree, rect, false)

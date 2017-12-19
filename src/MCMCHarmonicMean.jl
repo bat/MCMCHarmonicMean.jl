@@ -9,7 +9,13 @@ using ProgressMeter
 using Distributions
 using HDF5
 using StatsBase
+
 using BAT
+using BAT.Logging
+@enable_logging
+set_log_level!(MCMCHarmonicMean, LOG_INFO)
+
+
 using Base.Threads
 using MultiThreadingTools
 

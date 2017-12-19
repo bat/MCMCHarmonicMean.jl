@@ -36,7 +36,7 @@ function DataSet{T<:AbstractFloat}(data::Matrix{T}, logprob::Vector{T}, weights:
 end
 
 function Base.show(io::IO, data::DataSet)
-    println("DataSet: $(data.N) samples, $(data.P) parameters")
+    print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
 end
 
 
@@ -91,7 +91,7 @@ struct WhiteningResult{T<:AbstractFloat}
 end
 
 function Base.show(io::IO, wres::WhiteningResult)
-    println("Whitening Result: Determinant: $(wres.determinant), Target Prob. Factor: $(wres.targetprobfactor)")
+    print(io, "Whitening Result: Determinant: $(wres.determinant), Target Prob. Factor: $(wres.targetprobfactor)")
 end
 
 
@@ -124,7 +124,7 @@ function SearchResult(T::DataType, I::DataType)
 end
 
 function Base.show(io::IO, sres::SearchResult)
-    println("Search Result: Points: $(sres.points), Max. Log. Prob.: $(sres.maxLogProb), Min. Log. Prob.: $(sres.minLogProb)")
+    print(io, "Search Result: Points: $(sres.points), Max. Log. Prob.: $(sres.maxLogProb), Min. Log. Prob.: $(sres.minLogProb)")
 end
 
 
@@ -155,7 +155,7 @@ mutable struct PointCloud{T<:AbstractFloat, I<:Integer}
 end
 
 function Base.show(io::IO, cloud::PointCloud)
-    println("Point Cloud with $(cloud.points) points, probability factor: $(cloud.probfactor)")
+    print(io, "Point Cloud with $(cloud.points) points, probability factor: $(cloud.probfactor)")
 end
 
 
@@ -176,7 +176,7 @@ mutable struct IntegrationVolume{T<:AbstractFloat, I<:Integer}
     volume::T
 end
 function Base.show(io::IO, vol::IntegrationVolume)
-    println("Hyperrectangle: $(vol.pointcloud.points) points, $(vol.volume) Volume")
+    print(io, "Hyperrectangle: $(vol.pointcloud.points) points, $(vol.volume) Volume")
 end
 
 
@@ -211,7 +211,7 @@ struct IntegrationResult{T<:AbstractFloat, I<:Integer}
 end
 
 function Base.show(io::IO, ires::IntegrationResult)
-    println("Integration Result: $(ires.integral) +- $(ires.error), Rectangles: $(ires.nvols), average Points: $(ires.points), average Volume: $(ires.volume)")
+    print(io, "Integration Result: $(ires.integral) +- $(ires.error), Rectangles: $(ires.nvols), average Points: $(ires.points), average Volume: $(ires.volume)")
 end
 
 struct IntermediateResult{T<:AbstractFloat}
@@ -222,5 +222,5 @@ struct IntermediateResult{T<:AbstractFloat}
 end
 
 function Base.show(io::IO, ires::IntermediateResult)
-    println("Rectangle Integration Result: $(ires.integral) +- $(ires.error), average Points: $(ires.points), average Volume: $(ires.volume)")
+    print(io, "Rectangle Integration Result: $(ires.integral) +- $(ires.error), average Points: $(ires.points), average Volume: $(ires.volume)")
 end
