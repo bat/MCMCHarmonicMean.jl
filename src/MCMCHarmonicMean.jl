@@ -20,8 +20,6 @@ using Base.Threads
 using MultiThreadingTools
 
 include("./DataTypes.jl")
-
-# include("./DataTree.jl")
 include("./DataTreeList.jl")
 
 include("./PointCloud.jl")
@@ -32,9 +30,6 @@ include("./ImportData.jl")
 include("./Hyperrectangle.jl")
 include("./WhiteningTransformation.jl")
 include("./HarmonicMeanIntegration.jl")
-
-include("./Log.jl")
-
 
 
 export hm_integrate
