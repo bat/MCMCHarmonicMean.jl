@@ -186,12 +186,9 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
             cntr += 1
             prevv = v
             prevp = p
-            println(p)
         end
     end
-    println(cntr)
     tols = vInc ./ pInc
-    println(tols)
 
     i = length(tols)
     while i > 0
