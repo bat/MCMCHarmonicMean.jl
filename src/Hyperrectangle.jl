@@ -117,24 +117,22 @@ function find_density_test_cube{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, d
     iterations = 0
     while pt < points / tol || pt > points * tol
         iterations += 1
-        tol += 0.0001 * 2.0^iterations
+        tol += 0.001 * iterations
         if pt > points
             l /= mult
-            if last_change == -1
-                mult = mult^P
-            end
+            mult = last_change == -1 ? mult^2.0 : mult^0.5
             last_change = -1
         else
             l *= mult
-            if last_change == 1
-                mult = mult^(1.0 / P)
-            end
+            mult = last_change == 1 ? mult^2.0 : mult^0.5
             last_change = 1
         end
+
         HyperCubeVolume!(rect, mode, l)
         IntegrationVolume!(intvol, dataset, datatree, rect, false)
         pt = intvol.pointcloud.points
     end
 
+    @log_msg LOG_TRACE "Tolerance Test Cube: Iterations $iterations\tPoints: $(intvol.pointcloud.points)\ttarget Points: $points"
     return l, intvol
 end

@@ -162,6 +162,7 @@ end
 
 function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, centerIDs::Vector{I}, ntestcubes::I, pts::I)::T
     ntestpts = [2, 4, 8] * pts
+    @log_msg LOG_TRACE "Tolerance Test Cube Points: $([pts, ntestpts...])"
 
     vInc = Vector{T}(ntestcubes * (length(ntestpts) + 1))
     pInc = Vector{T}(ntestcubes * (length(ntestpts) + 1))
@@ -175,20 +176,22 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
             c = find_density_test_cube(dataset.data[:, centerIDs[id]], dataset, datatree, i)
             v = c[1]^dataset.P
             p = c[2].pointcloud.points
-            if v/prevv/p*prevp < 1
-                prevv = v
-                prevp = p
-                continue
-            end
+            #if v/prevv/p*prevp <= 1
+            #    prevv = v
+            #    prevp = p
+            #    continue
+            #end
             vInc[cntr] = v/prevv
             pInc[cntr] = p/prevp
             cntr += 1
             prevv = v
             prevp = p
+            println(p)
         end
     end
-
+    println(cntr)
     tols = vInc ./ pInc
+    println(tols)
 
     i = length(tols)
     while i > 0
@@ -198,10 +201,10 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
         i -= 1
     end
 
+    @log_msg LOG_DEBUG "Tolerance List: $tols"
+
     suggTol::T = mean(tols)
     suggTol = (suggTol - 1) * 4 + 1
-
-    @log_msg LOG_DEBUG "Suggested Tolerance: $suggTol"
 
     return suggTol
 end
