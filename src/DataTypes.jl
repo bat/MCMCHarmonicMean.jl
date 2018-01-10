@@ -59,7 +59,7 @@ HMIntegrationPrecisionSettings()
 end
 
 """
-struct HMIntegrationSettings
+mutable struct HMIntegrationSettings
     whitening_method::Symbol
     max_startingIDs::Integer
     max_startingIDs_fraction::AbstractFloat
@@ -120,7 +120,7 @@ end
 function SearchResult(T::DataType, I::DataType)
     @assert T<:AbstractFloat
     @assert I<:Integer
-    return SearchResult(Vector{I}(0), I(0), T(0), T(0), T(0), T(0))
+    return SearchResult{T, I}(Vector{I}(0), I(0), T(0), T(0), T(0), T(0))
 end
 
 function Base.show(io::IO, sres::SearchResult)

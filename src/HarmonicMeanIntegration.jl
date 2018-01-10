@@ -150,8 +150,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     end
     interror = sqrt(interror / (nRes - 1))
     if nRes == 1
-
-        interror = IntResults[1].interror
+        interror = IntResults[1].error
     end
 
     @log_msg LOG_INFO "Integration Result:\t $result +- $interror\nRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume"
@@ -176,11 +175,7 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
             c = find_density_test_cube(dataset.data[:, centerIDs[id]], dataset, datatree, i)
             v = c[1]^dataset.P
             p = c[2].pointcloud.points
-            #if v/prevv/p*prevp <= 1
-            #    prevv = v
-            #    prevp = p
-            #    continue
-            #end
+
             vInc[cntr] = v/prevv
             pInc[cntr] = p/prevp
             cntr += 1
@@ -192,7 +187,7 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
 
     i = length(tols)
     while i > 0
-        if isnan(tols[i]) || isinf(tols[i])
+        if isnan(tols[i]) || isinf(tols[i]) || tols[i] > 10 || tols[i] < 0.1
             deleteat!(tols, i)
         end
         i -= 1
@@ -201,7 +196,7 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
     @log_msg LOG_DEBUG "Tolerance List: $tols"
 
     suggTol::T = mean(tols)
-    suggTol = (suggTol - 1) * 4 + 1
+    #suggTol = (suggTol - 1) * 4 + 1
 
     return suggTol
 end
@@ -341,9 +336,8 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
             change = true
 
             #adjust lower bound
-            change1 = true
-            while change1 && vol.pointcloud.probfactor > 1.0
-                change1 = false
+            change1 = 0
+            while change1 != 0 && vol.pointcloud.probfactor > 1.0
                 margin = spvol.hi[p] - spvol.lo[p]
                 buffer = spvol.lo[p]
                 spvol.lo[p] -= margin * increase
@@ -352,11 +346,11 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                 resize_integrationvol!(newvol, vol, dataset, datatree, p, spvol, false, searchvol)
 
                 PtsIncrease = newvol.pointcloud.points / PtsIncrease
-                if newvol.pointcloud.probweightfactor < whiteningresult.targetprobfactor && PtsIncrease > (1 + increase / ptsTolInc)#(1.0 + increase / ptsTolInc)
+                if newvol.pointcloud.probweightfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc) && change1 != -1
                     copy!(vol, newvol)
                     wasCubeChanged = true
                     change = true
-                    change1 = true
+                    change1 = 1
                     @log_msg LOG_TRACE "lo inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                 else
                     #revert changes
@@ -371,23 +365,23 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
 
                     PtsIncrease = newvol.pointcloud.points / PtsIncrease
 
-                    if PtsIncrease > (1 - decrease / ptsTolDec)#(1 - decrease / ptsTolDec)
+                    if PtsIncrease > (1.0 - decrease / ptsTolDec) && change1 != 1
                         copy!(vol, newvol)
                         wasCubeChanged = true
                         change = true
-                        change1 = true
+                        change1 = -1
                         @log_msg LOG_TRACE "lo dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                     else
                         #revert changes
                         spvol.lo[p] = buffer
+                        change1 = 0
                     end
                 end
             end
 
             #adjust upper bound
-            change2 = true
-            while change2 && vol.pointcloud.probfactor > 1.0
-                change2 = false
+            change2 = 0
+            while change2!= 0 && vol.pointcloud.probfactor > 1.0
                 margin = spvol.hi[p] - spvol.lo[p]
                 buffer = spvol.hi[p]
                 spvol.hi[p] += margin * increase
@@ -396,11 +390,11 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                 resize_integrationvol!(newvol, vol, dataset, datatree, p, spvol, false, searchvol)
 
                 PtsIncrease = newvol.pointcloud.points / PtsIncrease
-                if newvol.pointcloud.probweightfactor < whiteningresult.targetprobfactor && PtsIncrease > (1 + increase / ptsTolInc)#(1.0 + increase / ptsTolInc)
+                if newvol.pointcloud.probweightfactor < whiteningresult.targetprobfactor && PtsIncrease > (1.0 + increase / ptsTolInc) && change2 != -1
                     copy!(vol, newvol)
                     wasCubeChanged = true
                     change = true
-                    change2 = true
+                    change2 = 1
                     @log_msg LOG_TRACE "up inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                 else
                     #revert changes
@@ -415,16 +409,16 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
 
                     PtsIncrease = newvol.pointcloud.points / PtsIncrease
 
-                    if PtsIncrease > (1 - decrease / ptsTolDec)#(1 - decrease / ptsTolDec)
+                    if PtsIncrease > (1.0 - decrease / ptsTolDec) && change2 != 1
                         copy!(vol, newvol)
                         wasCubeChanged = true
                         change = true
-                        change2 = true
+                        change2 = -1
                         @log_msg LOG_TRACE "up dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                     else
                         #revert changes
                         spvol.hi[p] = buffer
-
+                        change2 = 0
                     end
                 end
             end
