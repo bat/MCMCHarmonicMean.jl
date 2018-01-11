@@ -96,7 +96,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     progressbar = Progress(length(nRes))
     if settings.useMultiThreading
         @threads for i in 1:nRes
-            IntResults[i] = integrate_hyperrectangle_noerror(dataset, volumes[i], whiteningresult.determinant)
+            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant)
             lock(mutex) do
                 next!(progressbar)
             end
@@ -104,7 +104,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         end
     else
         for i in 1:nRes
-            IntResults[i] = integrate_hyperrectangle_noerror(dataset, volumes[i], whiteningresult.determinant)
+            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant)
             @log_msg LOG_DEBUG "$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)"
             next!(progressbar)
         end
@@ -236,8 +236,12 @@ function hyperrectangle_creationproccess!{T<:AbstractFloat, I<:Integer}(results:
         if inV
             continue
         end
+
         results[idc] = create_hyperrectangle(center, dataset, datatree, volumes, whiteningresult, tolerance, settings)
-        @log_msg LOG_DEBUG "Hyperrectangle created. Points:\t$(results[idc].pointcloud.points)\tVolume:\t$(results[idc].volume)\tProb. Factor:\t$(results[idc].pointcloud.probfactor)"
+
+        msg = "Hyperrectangle created. Points:\t$(results[idc].pointcloud.points)\tVolume:\t$(results[idc].volume)\tProb. Factor:\t$(results[idc].pointcloud.probfactor)"
+        #causes segmentation fault?!
+        #@log_msg LOG_DEBUG msg
     end
 end
 
@@ -448,6 +452,7 @@ end
     end
 end
 
+#=
 @inline function calculate_overlapping{T<:AbstractFloat, I<:Integer}(intvol::IntegrationVolume{T, I}, other::HyperRectVolume{T})::T
     innerVol::T = 1.0
     rect = intvol.spatialvolume
@@ -463,10 +468,11 @@ end
         end
     end
 
-    return T(innerVol / intvol.volume)
+    return innerVol / intvol.volume
 end
+=#
 
-function integrate_hyperrectangle_noerror{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, integrationvol::IntegrationVolume{T, I}, determinant::T)::IntermediateResult{T}
+function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, integrationvol::IntegrationVolume{T, I}, determinant::T)::IntermediateResult{T}
     s::Float64 = 0.0
     count::T = 0.0
     for i in integrationvol.pointcloud.pointIDs
@@ -476,61 +482,14 @@ function integrate_hyperrectangle_noerror{T<:AbstractFloat, I<:Integer}(dataset:
         count += dataset.weights[i]
     end
 
-    integral = sum(dataset.weights) * integrationvol.volume / s / determinant / exp(-integrationvol.pointcloud.maxLogProb)
+    totalWeight = sum(dataset.weights)
+    integral::T = totalWeight * integrationvol.volume / s / determinant / exp(-integrationvol.pointcloud.maxLogProb)
 
-    @log_msg LOG_TRACE "Volume:\t$(integrationvol.volume)\tIntegral: $integral\tPoints:\t$(count)"
+    weight = sum(dataset.weights[integrationvol.pointcloud.pointIDs])
+    p = weight / totalWeight
+    error::T = p * (1 - p) * weight / totalWeight * integral
 
-    return IntermediateResult(T(integral), T(0), T(integrationvol.pointcloud.points), integrationvol.volume)
-end
+    @log_msg LOG_DEBUG "Volume:\t$(integrationvol.volume)\tIntegral: $integral\tError: $(error)\tPoints:\t$(count)"
 
-function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, integrationvol::IntegrationVolume{T, I}, determinant::T)::IntermediateResult{T}
-    Results = Array{IntermediateResult, 1}(5)
-    nIntegrals = Float64(length(Results))
-
-    #start 10% larger, stop 10% smaller
-    volfactor::T = 0.9^(1/dataset.P)
-    step = deepcopy(integrationvol.spatialvolume.lo)
-
-
-    for p = 1:dataset.P
-        margin = integrationvol.spatialvolume.hi[p] - integrationvol.spatialvolume.lo[p]
-        integrationvol.spatialvolume.lo[p] -= margin * 0.5 * volfactor
-        integrationvol.spatialvolume.hi[p] += margin * 0.5 * volfactor
-        step[p] = margin * 0.5 * volfactor / 4
-    end
-
-    IntegrationVolume!(integrationvol, dataset, datatree, integrationvol.spatialvolume, true)
-    Results[1] = integrate_hyperrectangle_noerror(dataset, integrationvol, determinant)
-
-    p_range = 1:dataset.P
-    for i = 1:length(Results) - 1
-        for p in p_range
-            integrationvol.spatialvolume.lo[p] += step[p]
-            integrationvol.spatialvolume.hi[p] -= step[p]
-        end
-        shrink_integrationvol!(integrationvol, dataset, integrationvol.spatialvolume)
-        Results[i + 1] = integrate_hyperrectangle_noerror(dataset, integrationvol, determinant)
-    end
-
-
-    integral = 0.0
-    count = 0.0
-    for i = 1:length(Results)
-        integral += Results[i].integral / nIntegrals
-        count += Results[i].points / nIntegrals
-    end
-
-    interror = 0.0
-    for i = 1:length(Results)
-        interror += (Results[i].integral - integral) ^ 2
-    end
-    interror = sqrt(interror / (nIntegrals - 1))
-
-    if isnan(integral) || integral == Inf || integral == -Inf
-        res = integrate_hyperrectangle_noerror(dataset, integrationvol, determinant)
-        @log_msg LOG_ERROR "No error could be calculated for integrate_hyperrectangle()"
-        return IntermediateResult(res.integral, 0.0, res.points, integrationvol.volume)
-    end
-
-    return IntermediateResult(integral, interror, count, integrationvol.volume)
+    return IntermediateResult(integral, error, T(integrationvol.pointcloud.points), integrationvol.volume)
 end
