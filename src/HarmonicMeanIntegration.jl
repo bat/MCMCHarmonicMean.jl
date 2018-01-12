@@ -141,8 +141,8 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     result, point, volume, resultvar, pointvar, volumevar = tmean(_results, _points, _volumes, weights = rectweights, calculateVar = true)
 
-    @log_msg LOG_INFO "Integration Result:\t $result +- $resultvar\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, pointvar))\t avg. volume: $volume"
-    return IntegrationResult(result, resultvar, nRes, point, volume, volumes, centerIDs, suggTol, whiteningresult)
+    @log_msg LOG_INFO "Integration Result:\t $result +- $(sqrt(resultvar))\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, sqrt(pointvar)))\t avg. volume: $volume"
+    return IntegrationResult(result, sqrt(resultvar), nRes, point, volume, volumes, centerIDs, suggTol, whiteningresult)
 end
 
 
