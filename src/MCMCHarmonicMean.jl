@@ -19,6 +19,8 @@ set_log_level!(MCMCHarmonicMean, LOG_INFO)
 using Base.Threads
 using MultiThreadingTools
 
+include("./util.jl")
+
 include("./DataTypes.jl")
 include("./DataTreeList.jl")
 

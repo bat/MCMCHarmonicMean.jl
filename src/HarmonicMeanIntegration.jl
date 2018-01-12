@@ -35,7 +35,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     @log_msg LOG_INFO "Create Data Tree"
     datatree = create_search_tree(dataset)
-    @log_msg LOG_DEBUG "Search Tree: $datatree"
+    @log_msg LOG_TRACE "Search Tree: $datatree"
 
     @log_msg LOG_INFO "Find possible Hyperrectangle Centers"
     centerIDs = find_hypercube_centers(dataset, datatree, whiteningresult, settings)
@@ -80,12 +80,13 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     #remove rectangles with less than 10% points of the largest rectangle (in terms of points)
     j = length(volumes)
     for i = 1:length(volumes)
-        if volumes[j].pointcloud.points < maxPoints * 0.01
+        if volumes[j].pointcloud.points < maxPoints * 0.01 || volumes[j].pointcloud.points < 10
             deleteat!(volumes, j)
         end
         j -= 1
     end
 
+    @assert length(volumes) > 0
 
     @log_msg LOG_INFO "Integrating Hyperrectangles"
 
@@ -132,29 +133,16 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
             rectweights[i] += 1.0 / pweights[volumes[i].pointcloud.pointIDs[id]]
         end
     end
-    rectnorm = sum(rectweights)
+    #rectnorm = sum(rectweights)
 
-    result = 0.0
-    interror = 0.0
-    points = 0.0
-    volume = 0.
+    _results = [IntResults[i].integral for i in eachindex(IntResults)]
+    _points  = [IntResults[i].points   for i in eachindex(IntResults)]
+    _volumes = [IntResults[i].volume   for i in eachindex(IntResults)]
 
-    for i = 1:nRes
-        result += IntResults[i].integral * rectweights[i] / rectnorm
-        points += IntResults[i].points * rectweights[i] / rectnorm
-        volume += IntResults[i].volume * rectweights[i] / rectnorm
-    end
+    result, point, volume, resultvar, pointvar, volumevar = tmean(_results, _points, _volumes, weights = rectweights, calculateVar = true)
 
-    for i in 1:nRes
-        interror += (IntResults[i].integral - result)^2
-    end
-    interror = sqrt(interror / (nRes - 1))
-    if nRes == 1
-        interror = IntResults[1].error
-    end
-
-    @log_msg LOG_INFO "Integration Result:\t $result +- $interror\nRectangles created: $(nRes)\tavg. points used: $points\t avg. volume: $volume"
-    return IntegrationResult(result, interror, nRes, points, volume, volumes, centerIDs, suggTol, whiteningresult)
+    @log_msg LOG_INFO "Integration Result:\t $result +- $resultvar\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, pointvar))\t avg. volume: $volume"
+    return IntegrationResult(result, resultvar, nRes, point, volume, volumes, centerIDs, suggTol, whiteningresult)
 end
 
 
@@ -187,15 +175,15 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
 
     i = length(tols)
     while i > 0
-        if isnan(tols[i]) || isinf(tols[i]) || tols[i] > 10 || tols[i] < 0.1
+        if isnan(tols[i]) || isinf(tols[i])
             deleteat!(tols, i)
         end
         i -= 1
     end
 
-    @log_msg LOG_DEBUG "Tolerance List: $tols"
+    @log_msg LOG_TRACE "Tolerance List: $tols"
 
-    suggTol::T = mean(tols)
+    suggTol::T, = tmean(tols)
     #suggTol = (suggTol - 1) * 4 + 1
 
     return suggTol
@@ -240,8 +228,16 @@ function hyperrectangle_creationproccess!{T<:AbstractFloat, I<:Integer}(results:
         results[idc] = create_hyperrectangle(center, dataset, datatree, volumes, whiteningresult, tolerance, settings)
 
         msg = "Hyperrectangle created. Points:\t$(results[idc].pointcloud.points)\tVolume:\t$(results[idc].volume)\tProb. Factor:\t$(results[idc].pointcloud.probfactor)"
+
         #causes segmentation fault?!
-        #@log_msg LOG_DEBUG msg
+        @log_msg LOG_DEBUG msg
+
+        #this doesnt cause a segmentation fault
+#=
+        lock(mutex) do
+            @log_msg LOG_DEBUG msg
+        end
+=#
     end
 end
 
@@ -452,28 +448,9 @@ end
     end
 end
 
-#=
-@inline function calculate_overlapping{T<:AbstractFloat, I<:Integer}(intvol::IntegrationVolume{T, I}, other::HyperRectVolume{T})::T
-    innerVol::T = 1.0
-    rect = intvol.spatialvolume
-
-    for p = 1:ndims(rect)
-        if rect.lo[p] > other.hi[p] || rect.hi[p] < other.lo[p]
-            return 0.0
-        end
-        if rect.lo[p] > other.lo[p] && rect.hi[p] < other.hi[p]
-            innerVol *= rect.hi[p] - rect.lo[p]
-        else
-            innerVol *= min(abs(rect.lo[p] - other.hi[p]), abs(rect.hi[p] - other.lo[p]))
-        end
-    end
-
-    return innerVol / intvol.volume
-end
-=#
 
 function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, integrationvol::IntegrationVolume{T, I}, determinant::T)::IntermediateResult{T}
-    s::Float64 = 0.0
+    s::T = 0.0
     count::T = 0.0
     for i in integrationvol.pointcloud.pointIDs
         #for numerical stability
@@ -482,12 +459,11 @@ function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet
         count += dataset.weights[i]
     end
 
-    totalWeight = sum(dataset.weights)
+    totalWeight::T = sum(dataset.weights)
     integral::T = totalWeight * integrationvol.volume / s / determinant / exp(-integrationvol.pointcloud.maxLogProb)
 
-    weight = sum(dataset.weights[integrationvol.pointcloud.pointIDs])
-    p = weight / totalWeight
-    error::T = p * (1 - p) * weight / totalWeight * integral
+    #TODO error estimation for individual rectangles
+    error::T = 0.0
 
     @log_msg LOG_DEBUG "Volume:\t$(integrationvol.volume)\tIntegral: $integral\tError: $(error)\tPoints:\t$(count)"
 
