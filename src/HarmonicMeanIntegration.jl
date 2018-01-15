@@ -130,7 +130,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     pweights = create_pointweights(dataset, volumes)
     for i in eachindex(volumes)
         for id in eachindex(volumes[i].pointcloud.pointIDs)
-            rectweights[i] += 1.0 / pweights[volumes[i].pointcloud.pointIDs[id]]
+            rectweights[i] += dataset.weights[id] / pweights[volumes[i].pointcloud.pointIDs[id]]
         end
     end
     #rectnorm = sum(rectweights)
