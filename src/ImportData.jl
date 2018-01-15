@@ -28,7 +28,7 @@ function loadhdf5(T::DataType, path::String, params::Array{String}, range)::Data
     @showprogress for i in 2:length(params)
         data[i, :] = file[params[i]][range]
     end
-    LogProbability = file["LogProbability"][range]
+    LogProbability = convert(Vector{T}, file["LogProbability"][range])
     #LogLikelihood = file["LogLikelihood"][range]
     Chain = convert(Array{Int64, 1}, file["Chain"][range])
 
@@ -69,7 +69,7 @@ function loadhdf5(T::DataType, path::String, params::Array{String}, range)::Data
     newLogProb = LogProbability[uniqueID]
     newWeights = weights[uniqueID]
 
-    result = DataSet(newData, newLogProb, newWeights, N - removedPoints, P)
+    result = DataSet(newData, newLogProb, newWeights)
 
     return result
 end
