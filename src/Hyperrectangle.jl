@@ -43,11 +43,13 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
 
     sortLogProb = sortperm(dataset.logprob, rev = true)
 
-    NMax = ceil(I, min(min(dataset.N, settings.max_startingIDs * 10), dataset.N * min(1.0, 10 * settings.max_startingIDs_fraction)))
+    NMax = round(I, sqrt(dataset.N) * settings.max_startingIDs_fraction)
+    @log_msg LOG_DEBUG "Considered starting Points $NMax"
 
     ignorePoint = falses(dataset.N)
 
-    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, datatree, max(round(I, dataset.N * 0.001), dataset.P * 10))
+    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, datatree, round(I, sqrt(dataset.N * 0.01)))
+    @log_msg LOG_DEBUG "Test length of starting cubes: $testlength"
 
     @showprogress for n::I in sortLogProb[1:NMax]
         if ignorePoint[n]

@@ -50,7 +50,7 @@ HMIntegrationPrecisionSettings()
 
 #Variables
 - 'whitening_method::Symbol' : which whitening method to use
-- 'max_startingIDs::Integer' : how many starting ids are allowed to be generated
+- 'max_startingIDs::Integer' : influences how many starting ids are allowed to be generated
 - 'max_startingIDs_fraction::AbstractFloat' : how many points are considered as possible starting points as a fraction of total points available
 - 'rect_increase::AbstractFloat' : describes the procentual rectangle volume increase/decrease during hyperrectangle creation. Low values can increase the precision if enough points are available but can cause systematically wrong results if not enough points are available.
 - 'use_all_rects::Bool' : All rectangles are used for the integration process no matter how big their overlap is. If enabled the rectangles are weighted by their overlap.
@@ -68,9 +68,9 @@ mutable struct HMIntegrationSettings
     skip_centerIDsinsideHyperRects::Bool
     useMultiThreading::Bool
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.001, 0.1, true, true, true)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.005, 0.1, false, false, true)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 0.025, 0.1, false, false, true)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, true, true, true)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, false, false, true)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, false, false, true)
 
 """
     WhiteningResult{T<:AbstractFloat}
@@ -197,6 +197,7 @@ the starting ids, and the average number of points and volume of the created hyp
 - 'volumelist::Vector{IntegrationVolume{T, I}}' : a list of the hyper-rectangles
 - 'startingIDs::Vector{I}' : a list of possible starting points for the hyper-rectangle creation process
 - 'whiteningresult::WhiteningResult{T}' : the results of the whitening transformation
+- 'integrals::Vector{T}' : The integral estimates of the different hyper-rectangles
 """
 struct IntegrationResult{T<:AbstractFloat, I<:Integer}
     integral::T
@@ -208,6 +209,7 @@ struct IntegrationResult{T<:AbstractFloat, I<:Integer}
     startingIDs::Vector{I}
     tolerance::T
     whiteningresult::WhiteningResult{T}
+    integrals::Vector{T}
 end
 
 function Base.show(io::IO, ires::IntegrationResult)

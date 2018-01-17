@@ -86,7 +86,9 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         j -= 1
     end
 
-    @assert length(volumes) > 0
+    if !(length(volumes) > 0)
+        @log_msg LOG_ERROR "No hyper-rectangles could be created. Try integration with more points or different settings."
+    end
 
     @log_msg LOG_INFO "Integrating Hyperrectangles"
 
@@ -117,10 +119,20 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     #remove integrals with no result
     j = nRes
     for i = 1:nRes
-        if isnan(IntResults[j].integral)
-            deleteat!(IntResults, j)
+        try
+            if !isassigned(IntResults, j) || isnan(IntResults[j].integral)
+                deleteat!(IntResults, j)
+            end
+        catch e
+            @log_msg LOG_ERROR string(e)
+            println(IntResults)
+            println(length(IntResults))
+            if length(IntResults) >= j
+                deleteat!(IntResults, j)
+            end
+        finally
+            j -= 1
         end
-        j -= 1
     end
 
     nRes = length(IntResults)
@@ -141,8 +153,8 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     result, point, volume, resultvar, pointvar, volumevar = tmean(_results, _points, _volumes, weights = rectweights, calculateVar = true)
 
-    @log_msg LOG_INFO "Integration Result:\t $result +- $(sqrt(resultvar))\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, sqrt(pointvar)))\t avg. volume: $volume"
-    return IntegrationResult(result, sqrt(resultvar), nRes, point, volume, volumes, centerIDs, suggTol, whiteningresult)
+    @log_msg LOG_INFO "Integration Result:\t $result +- $(sqrt(resultvar/nRes))\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, sqrt(pointvar)))\t avg. volume: $volume"
+    return IntegrationResult(result, sqrt(resultvar/nRes), nRes, point, volume, volumes, centerIDs, suggTol, whiteningresult, _results)
 end
 
 
@@ -271,7 +283,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
 
     it = 0
     while vol.pointcloud.probfactor < whiteningresult.targetprobfactor / tol || vol.pointcloud.probfactor > whiteningresult.targetprobfactor
-        tol += 0.01 * 2^it
+        tol += 0.01 * it
         it += 1
 
         if vol.pointcloud.probfactor > whiteningresult.targetprobfactor
@@ -304,7 +316,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
 
 
 
-    #LogLow("\tTEST Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)")
+    @log_msg LOG_TRACE "Starting Hypercube Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)"
 
 
     wasCubeChanged = true
