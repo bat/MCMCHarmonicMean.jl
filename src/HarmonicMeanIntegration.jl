@@ -43,7 +43,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     @log_msg LOG_INFO "Find good tolerances for Hyperrectangle Creation"
     suggTolPts = dataset.N > 1e5 ? round(I, 0.001 * dataset.N) : suggTolPts = round(I, 0.01 * dataset.N)
-    suggTol = findtolerance(dataset, datatree, centerIDs, 10, suggTolPts)
+    suggTol = findtolerance(dataset, datatree, centerIDs, 10, suggTolPts) * settings.tolerance_mult
     @log_msg LOG_DEBUG "Tolerance: $suggTol"
     maxPoints::I = 0
     totalpoints::I = 0
@@ -99,7 +99,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     progressbar = Progress(length(nRes))
     if settings.useMultiThreading
         @threads for i in 1:nRes
-            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant)
+            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant * settings.determinant_PreWhitening)
             lock(mutex) do
                 next!(progressbar)
             end
@@ -107,7 +107,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         end
     else
         for i in 1:nRes
-            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant)
+            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant * settings.determinant_PreWhitening)
             @log_msg LOG_DEBUG "$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)"
             next!(progressbar)
         end
@@ -137,14 +137,16 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     nRes = length(IntResults)
 
-    rectweights = zeros(T, nRes)
+    #rectweights = zeros(T, nRes)
 
-    pweights = create_pointweights(dataset, volumes)
-    for i in eachindex(volumes)
-        for id in eachindex(volumes[i].pointcloud.pointIDs)
-            rectweights[i] += dataset.weights[id] / pweights[volumes[i].pointcloud.pointIDs[id]]
-        end
-    end
+    #pweights = create_pointweights(dataset, volumes)
+    #for i in eachindex(volumes)
+    #    for id in eachindex(volumes[i].pointcloud.pointIDs)
+    #        rectweights[i] += dataset.weights[id] / pweights[volumes[i].pointcloud.pointIDs[id]]
+    #    end
+    #end
+    rectweights = ones(T, IntResults)
+
     #rectnorm = sum(rectweights)
 
     _results = [IntResults[i].integral for i in eachindex(IntResults)]
