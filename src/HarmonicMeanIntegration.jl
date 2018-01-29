@@ -43,7 +43,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
 
     @log_msg LOG_INFO "Find good tolerances for Hyperrectangle Creation"
     suggTolPts = dataset.N > 1e5 ? round(I, 0.001 * dataset.N) : suggTolPts = round(I, 0.01 * dataset.N)
-    suggTol = findtolerance(dataset, datatree, centerIDs, 10, suggTolPts) * settings.tolerance_mult
+    suggTol = findtolerance(dataset, datatree, centerIDs, min(10, settings.warning_minstartingids), suggTolPts) * settings.tolerance_mult
     @log_msg LOG_DEBUG "Tolerance: $suggTol"
     maxPoints::I = 0
     totalpoints::I = 0
@@ -77,10 +77,10 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
     end
 
 
-    #remove rectangles with less than 10% points of the largest rectangle (in terms of points)
+    #remove rectangles with less than 1% points of the largest rectangle (in terms of points)
     j = length(volumes)
     for i = 1:length(volumes)
-        if volumes[j].pointcloud.points < maxPoints * 0.01 || volumes[j].pointcloud.points < 10
+        if volumes[j].pointcloud.points < maxPoints * 0.01 || volumes[j].pointcloud.points < dataset.P * 4
             deleteat!(volumes, j)
         end
         j -= 1
@@ -103,12 +103,10 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
             lock(mutex) do
                 next!(progressbar)
             end
-            @log_msg LOG_DEBUG "$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)"
         end
     else
         for i in 1:nRes
             IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant * settings.determinant_PreWhitening)
-            @log_msg LOG_DEBUG "$i. Integral: $(IntResults[i].integral)\tVolume\t$(IntResults[i].volume)\tPoints:\t$(IntResults[i].points)"
             next!(progressbar)
         end
     end
@@ -122,6 +120,7 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
         try
             if !isassigned(IntResults, j) || isnan(IntResults[j].integral)
                 deleteat!(IntResults, j)
+                deleteat!(volumes, j)
             end
         catch e
             @log_msg LOG_ERROR string(e)
@@ -129,34 +128,45 @@ function hm_integrate{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}; rang
             println(length(IntResults))
             if length(IntResults) >= j
                 deleteat!(IntResults, j)
+                deleteat(volumes, j)
             end
         finally
             j -= 1
         end
     end
 
+    @assert length(volumes) == length(IntResults)
+
     nRes = length(IntResults)
 
-    #rectweights = zeros(T, nRes)
+    local rectweights::Vector{T}
+    if settings.userectweights
+        rectweights = zeros(T, nRes)
 
-    #pweights = create_pointweights(dataset, volumes)
-    #for i in eachindex(volumes)
-    #    for id in eachindex(volumes[i].pointcloud.pointIDs)
-    #        rectweights[i] += dataset.weights[id] / pweights[volumes[i].pointcloud.pointIDs[id]]
-    #    end
-    #end
-    rectweights = ones(T, IntResults)
+        pweights = create_pointweights(dataset, volumes)
+        for i in eachindex(volumes)
+            trw = sum(dataset.weights[volumes[i].pointcloud.pointIDs])
+            for id in eachindex(volumes[i].pointcloud.pointIDs)
+                rectweights[i] += 1.0 / trw / pweights[volumes[i].pointcloud.pointIDs[id]] / IntResults[i].error
+            end
+        end
+    else
+        rectweights = ones(T, nRes)
+    end
 
-    #rectnorm = sum(rectweights)
+    rectnorm = sum(rectweights)
 
     _results = [IntResults[i].integral for i in eachindex(IntResults)]
     _points  = [IntResults[i].points   for i in eachindex(IntResults)]
     _volumes = [IntResults[i].volume   for i in eachindex(IntResults)]
 
-    result, point, volume, resultvar, pointvar, volumevar = tmean(_results, _points, _volumes, weights = rectweights, calculateVar = true)
+    result, point, volume = tmean(_results, _points, _volumes, weights = rectweights)
+    resultvar = sqrt(var(_results) / rectnorm)
 
-    @log_msg LOG_INFO "Integration Result:\t $result +- $(sqrt(resultvar/nRes))\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, sqrt(pointvar)))\t avg. volume: $volume"
-    return IntegrationResult(result, sqrt(resultvar/nRes), nRes, point, volume, volumes, centerIDs, suggTol, whiteningresult, _results)
+    pointvar = sqrt(var(_points))
+
+    @log_msg LOG_INFO "Integration Result:\t $result +- $(resultvar))\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, pointvar))\t avg. volume: $volume"
+    return IntegrationResult(result, resultvar, nRes, point, volume, volumes, centerIDs, suggTol, whiteningresult, IntResults)
 end
 
 
@@ -220,7 +230,7 @@ function hyperrectangle_creationproccess!{T<:AbstractFloat, I<:Integer}(results:
         inV = false
 
         lock(mutex) do
-            next!(progressbar)
+    #        next!(progressbar)
             #check if starting id is inside another rectangle
 
             if settings.skip_centerIDsinsideHyperRects
@@ -243,15 +253,7 @@ function hyperrectangle_creationproccess!{T<:AbstractFloat, I<:Integer}(results:
 
         msg = "Hyperrectangle created. Points:\t$(results[idc].pointcloud.points)\tVolume:\t$(results[idc].volume)\tProb. Factor:\t$(results[idc].pointcloud.probfactor)"
 
-        #causes segmentation fault?!
         @log_msg LOG_DEBUG msg
-
-        #this doesnt cause a segmentation fault
-#=
-        lock(mutex) do
-            @log_msg LOG_DEBUG msg
-        end
-=#
     end
 end
 
@@ -343,7 +345,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
         for p::I = 1:dataset.P
             if dimensionsFinished[p]
                 #risky, can improve results but may lead to endless loop
-                #dimensionsFinished[p] = false
+                dimensionsFinished[p] = false
                 continue
             end
 
@@ -464,22 +466,44 @@ end
 
 
 function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, integrationvol::IntegrationVolume{T, I}, determinant::T)::IntermediateResult{T}
+    nsmallervols = 10
+    integrals = zeros(T, 1+nsmallervols)
+    integrals[1] = integrate_hyperrectangle(dataset, integrationvol.pointcloud.pointIDs, integrationvol.volume, determinant, integrationvol.pointcloud.maxLogProb)
+
+    for i = 2:1+nsmallervols
+        #shrinking of 5% per iteration
+        rdec = 0.95
+        dim_change = rdec^(1.0 / dataset.P)
+
+        margins = (integrationvol.spatialvolume.hi .- integrationvol.spatialvolume.lo) .* (1.0 - dim_change) .* 0.5
+        integrationvol.spatialvolume.lo .+= margins
+        integrationvol.spatialvolume.hi .-= margins
+
+        shrink_integrationvol!(integrationvol, dataset, integrationvol.spatialvolume)
+        integrals[i] = integrate_hyperrectangle(dataset, integrationvol.pointcloud.pointIDs, integrationvol.volume, determinant, integrationvol.pointcloud.maxLogProb)
+    end
+
+    #no division by sqrt(11) because if empty volume is included the results are not expected to be equal. -> helps finding volumes with empty volume if error is high
+    error = sqrt(var(integrals))
+    integral = mean(integrals)
+
+    @log_msg LOG_DEBUG "Integral: $integral\tError: $error"
+
+    return IntermediateResult(integral, error, T(integrationvol.pointcloud.points), integrationvol.volume)
+end
+
+function integrate_hyperrectangle{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, pointIDs::Vector{I}, volume::T, determinant::T, maxLogProb::T = 0.0)::T
     s::T = 0.0
     count::T = 0.0
-    for i in integrationvol.pointcloud.pointIDs
+    for i in pointIDs
         #for numerical stability
-        prob = (dataset.logprob[i] - integrationvol.pointcloud.maxLogProb)
+        prob = (dataset.logprob[i] - maxLogProb)
         s += 1.0 / exp(prob) * dataset.weights[i]
         count += dataset.weights[i]
     end
 
     totalWeight::T = sum(dataset.weights)
-    integral::T = totalWeight * integrationvol.volume / s / determinant / exp(-integrationvol.pointcloud.maxLogProb)
+    integral::T = totalWeight * volume / s / determinant / exp(-maxLogProb)
 
-    #TODO error estimation for individual rectangles
-    error::T = 0.0
-
-    @log_msg LOG_DEBUG "Volume:\t$(integrationvol.volume)\tIntegral: $integral\tError: $(error)\tPoints:\t$(count)"
-
-    return IntermediateResult(integral, error, T(integrationvol.pointcloud.points), integrationvol.volume)
+    return integral
 end

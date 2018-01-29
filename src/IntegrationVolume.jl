@@ -37,8 +37,8 @@ function shrink_integrationvol!{T<:AbstractFloat, I<:Integer}(volume::Integratio
     for _ in eachindex(volume.pointcloud.pointIDs)
         inV = true
         for p = 1:dataset.P
-            if dataset.data[p, i] < newrect.lo[p] || dataset.data[p, i] > newrect.hi[p]
-                inVol = false
+            if dataset.data[p, volume.pointcloud.pointIDs[i]] < newrect.lo[p] || dataset.data[p, volume.pointcloud.pointIDs[i]] > newrect.hi[p]
+                inV = false
                 break
             end
         end
@@ -48,6 +48,8 @@ function shrink_integrationvol!{T<:AbstractFloat, I<:Integer}(volume::Integratio
         i -= 1
     end
     copy!(volume.spatialvolume, newrect)
+    volume.pointcloud.points = length(volume.pointcloud.pointIDs)
+    volume.volume = prod(newrect.hi .- newrect.lo)
 end
 
 

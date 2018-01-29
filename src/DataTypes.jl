@@ -69,10 +69,12 @@ mutable struct HMIntegrationSettings
     stop_ifenoughpoints::Bool
     skip_centerIDsinsideHyperRects::Bool
     useMultiThreading::Bool
+    warning_minstartingids::Integer
+    userectweights::Bool
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, 1.0, 1.0, true, true, true)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, 1.0, 1.0, false, false, true)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, 1.0, 1.0, false, false, true)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, 1.0, 1.0, true, true, true, 16, true)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, 1.0, 1.0, false, false, true, 16, true)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, 1.0, 1.0, false, false, true, 16, true)
 
 """
     WhiteningResult{T<:AbstractFloat}
@@ -183,6 +185,17 @@ end
 
 
 
+struct IntermediateResult{T<:AbstractFloat}
+    integral::T
+    error::T
+    points::T
+    volume::T
+end
+
+function Base.show(io::IO, ires::IntermediateResult)
+    print(io, "Rectangle Integration Result: $(ires.integral) +- $(ires.error), average Points: $(ires.points), average Volume: $(ires.volume)")
+end
+
 
 """
     IntegrationResult{T<:AbstractFloat, I<:Integer}
@@ -211,20 +224,9 @@ struct IntegrationResult{T<:AbstractFloat, I<:Integer}
     startingIDs::Vector{I}
     tolerance::T
     whiteningresult::WhiteningResult{T}
-    integrals::Vector{T}
+    integrals::Vector{IntermediateResult}
 end
 
 function Base.show(io::IO, ires::IntegrationResult)
     print(io, "Integration Result: $(ires.integral) +- $(ires.error), Rectangles: $(ires.nvols), average Points: $(ires.points), average Volume: $(ires.volume)")
-end
-
-struct IntermediateResult{T<:AbstractFloat}
-    integral::T
-    error::T
-    points::T
-    volume::T
-end
-
-function Base.show(io::IO, ires::IntermediateResult)
-    print(io, "Rectangle Integration Result: $(ires.integral) +- $(ires.error), average Points: $(ires.points), average Volume: $(ires.volume)")
 end

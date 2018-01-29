@@ -87,12 +87,13 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
         end
     end
 
-    #return at least 10 possible hyper-rect centers
-    if NMax < 10 && stop >= 10
-        NMax = 10
-    elseif NMax < 10 && stop < 10
-        @log_msg LOG_WARNING "Returned minimum number of starting points: 10"
-        return sortLogProb[1:10]
+    #return at least settings.warning_minstartingids possible hyper-rect centers
+    if NMax < settings.warning_minstartingids && stop >= settings.warning_minstartingids
+        NMax = settings.warning_minstartingids
+    elseif NMax < settings.warning_minstartingids && stop < settings.warning_minstartingids
+        @log_msg LOG_WARNING "Returned minimum number of starting points: $(settings.warning_minstartingids)"
+        returnids = round.(I, [i for i=0:(settings.warning_minstartingids-1)] * dataset.N * 0.01 .+ 1.0)
+        return sortLogProb[returnids]
     end
 
     @log_msg LOG_DEBUG "Possible Hypersphere Centers: $NMax out of $(dataset.N) points"
