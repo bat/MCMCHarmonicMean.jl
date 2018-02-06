@@ -84,27 +84,6 @@ function search{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::
     #searchpoints = false
     search!(res, dataset, datatree, searchvol, searchpoints)
 
-    #check
-    btpoints = 0
-    ids = Vector{Int64}(0)
-    for i = 1:dataset.N
-        inV = true
-        for p=1:dataset.P
-            if dataset.data[p, i] < searchvol.lo[p] || dataset.data[p, i] > searchvol.hi[p]
-                inV = false
-                break
-            end
-        end
-        if inV
-            btpoints += 1
-            append!(ids, i)
-        end
-    end
-    if btpoints != res.points
-        error(btpoints, "\t!=\t", res.points)
-        println(ids)
-        println(res.pointIDs)
-    end
     return res
 end
 
