@@ -19,6 +19,7 @@ mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     weights::Vector{T}
     N::I
     P::I
+    iswhitened::Bool
 end
 
 function DataSet(data::Tuple{DensitySampleVector, MCMCSampleIDVector, MCMCBasicStats})
@@ -32,7 +33,7 @@ function DataSet(data::BAT.DensitySampleVector)
         convert(Vector{T}, data.weight))
 end
 function DataSet{T<:AbstractFloat}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
-    return DataSet{T, Int64}(data, logprob, weights, size(data)[2], size(data)[1])
+    return DataSet{T, Int64}(data, logprob, weights, size(data)[2], size(data)[1], false)
 end
 Base.show(io::IO, data::DataSet) = print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
 Base.eltype(data::DataSet{T, I}) where {T<:AbstractFloat, I<:Integer} = (T, I)
@@ -66,10 +67,11 @@ mutable struct HMIntegrationSettings
     useMultiThreading::Bool
     warning_minstartingids::Integer
     userectweights::Bool
+    nvolumerand::Integer
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, true, true, true, 16, true)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, false, false, true, 16, true)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, false, false, true, 16, true)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, true, true, true, 16, true, 1)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, false, false, true, 16, true, 1)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, false, false, true, 16, true, 3)
 
 """
     WhiteningResult{T<:AbstractFloat}

@@ -15,18 +15,26 @@ function hm_integrate(bat_input::Tuple{DensitySampleVector, MCMCSampleIDVector, 
     return hm_integrate(HMIData(DataSet(bat_input)))
 end
 function hm_swapdata(result::HMIData{T, I}, data::DataSet{T, I}) where {T<:AbstractFloat, I<:Integer}
-    result.whiteningresult = Nullable{WhiteningResult{T}}()
+    if !data.iswhitened result.whiteningresult = Nullable{WhiteningResult{T}}() end
     result.datatree = Nullable{SearchTree}()
     result.dataset = data
     result.datasetchange = true
     return
+end
+function hm_reset_hyperrectangles(result::HMIData{T, I}) where {T<:AbstractFloat, I<:Integer}
+    result.volumelist = Vector{IntegrationVolume{T, I}}(0)
+    result.startingIDs = Vector{I}(0)
+    return
+end
+function hm_reset_tolerance(result::HMIData{T, I}) where {T<:AbstractFloat, I<:Integer}
+    result.tolerance = 0.0
 end
 
 function hm_integrate(
     result::HMIData{T, I};
     range = Colon(),
     settings::HMIntegrationSettings = HMIntegrationStandardSettings()
-) where {T<:AbstractFloat, I<:Integer}
+)::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
 
     dataset = result.dataset
     if dataset.N < dataset.P * 50
@@ -145,14 +153,14 @@ function hm_integrate(
     progressbar = Progress(length(nRes))
     if settings.useMultiThreading
         @threads for i in 1:nRes
-            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant)
+            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant, settings.nvolumerand)
             lock(BAT.Logging._global_lock) do
                 next!(progressbar)
             end
         end
     else
         for i in 1:nRes
-            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant)
+            IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant, settings.nvolumerand)
             next!(progressbar)
         end
     end
@@ -217,7 +225,7 @@ function hm_integrate(
     result.points = point
     result.volume = volume
     result.integrals = IntResults
-    return
+    return result
 end
 
 
@@ -555,13 +563,12 @@ end
 function integrate_hyperrectangle(
     dataset::DataSet{T, I},
     integrationvol::IntegrationVolume{T, I},
-    determinant::T
+    determinant::T,
+    nsmallervols::I
 )::IntermediateResult{T} where {T<:AbstractFloat, I<:Integer}
-    nsmallervols = 1
-    integrals = zeros(T, nsmallervols)
 
-    #integrals = zeros(T, 1 + nsmallervols)
-    #integrals[1] = integrate_hyperrectangle(dataset, integrationvol.pointcloud.pointIDs, integrationvol.volume, determinant, integrationvol.pointcloud.maxLogProb)
+    integrals = zeros(T, nsmallervols)
+    localvolume = deepcopy(integrationvol)
 
     for i = 1:nsmallervols
     #for i = 2:1+nsmallervols
@@ -569,12 +576,12 @@ function integrate_hyperrectangle(
         rdec = 1.0 - rand() * 0.1
         dim_change = rdec^(1.0 / dataset.P)
 
-        margins = (integrationvol.spatialvolume.hi .- integrationvol.spatialvolume.lo) .* (1.0 - dim_change) .* 0.5
-        integrationvol.spatialvolume.lo .+= margins
-        integrationvol.spatialvolume.hi .-= margins
+        margins = (localvolume.spatialvolume.hi .- localvolume.spatialvolume.lo) .* (1.0 - dim_change) .* 0.5
+        localvolume.spatialvolume.lo .+= margins
+        localvolume.spatialvolume.hi .-= margins
 
-        shrink_integrationvol!(integrationvol, dataset, integrationvol.spatialvolume)
-        integrals[i] = integrate_hyperrectangle(dataset, integrationvol.pointcloud.pointIDs, integrationvol.volume, determinant, integrationvol.pointcloud.maxLogProb)
+        shrink_integrationvol!(localvolume, dataset, localvolume.spatialvolume)
+        integrals[i] = integrate_hyperrectangle(dataset, localvolume.pointcloud.pointIDs, localvolume.volume, determinant, localvolume.pointcloud.maxLogProb)
 
     end
 

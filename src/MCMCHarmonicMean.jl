@@ -35,7 +35,7 @@ include("./HarmonicMeanIntegration.jl")
 
 
 export hm_integrate
-export hm_swapdata
+export hm_swapdata, hm_reset_tolerance, hm_reset_hyperrectangles
 
 export DataSet
 export WhiteningResult
