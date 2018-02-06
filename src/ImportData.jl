@@ -2,7 +2,14 @@
 
 export load_mcmc_data
 
-function load_mcmc_data(path::String, params::Array{String}, range = Colon(), treename::String = "", dataFormat::DataType = Float64)::DataSet
+function load_mcmc_data(
+    path::String,
+    params::Array{String},
+    range = Colon(),
+    treename::String = "",
+    dataFormat::DataType = Float64
+)::DataSet
+
     ending = split(path, ".")[end]
     local res::DataSet
 
@@ -16,7 +23,13 @@ function load_mcmc_data(path::String, params::Array{String}, range = Colon(), tr
     return res
 end
 
-function loadhdf5(T::DataType, path::String, params::Array{String}, range)::DataSet
+function loadhdf5(
+    T::DataType,
+    path::String,
+    params::Array{String},
+    range
+)::DataSet
+
     file = h5open(path, "r")
 
     data_1st = file[params[1]][range]

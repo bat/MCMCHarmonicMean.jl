@@ -22,7 +22,7 @@ using MultiThreadingTools
 include("./util.jl")
 
 include("./DataTypes.jl")
-include("./DataTreeList.jl")
+include("./DataTree.jl")
 
 include("./PointCloud.jl")
 include("./IntegrationVolume.jl")
@@ -35,8 +35,12 @@ include("./HarmonicMeanIntegration.jl")
 
 
 export hm_integrate
+export hm_swapdata
 
 export DataSet
+export WhiteningResult
+export SearchTree, DataTree
+export IntermediateResult
 
 export HMIntegrationPrecisionSettings
 export HMIntegrationFastSettings
@@ -46,7 +50,8 @@ export HMIntegrationSettings
 
 export data_whitening
 
-export IntegrationResult
+export HMIData
+export PointCloud
 export IntegrationVolume
 
 end # module

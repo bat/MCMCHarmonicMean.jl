@@ -7,7 +7,14 @@ using ProgressMeter
 
 using MCMCHarmonicMean
 
-function root2hdf5(T::DataType, path::String; params::Array{String} = Array{String}(0), range = Colon(), treename::String = "")
+function root2hdf5(
+    T::DataType,
+    path::String;
+    params::Array{String} = Array{String}(0),
+    range = Colon(),
+    treename::String = ""
+)
+
     if treename == ""
         treename = convert(String, split(split(path, ".")[1], "/")[end])
         @log_msg LOG_INFO "Tree name: $treename"

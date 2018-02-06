@@ -6,7 +6,11 @@
 
 creates a hypercube shaped spatial volume
 """
-function HyperCubeVolume{T<:AbstractFloat}(origin::Vector{T}, edgelength::T)::HyperRectVolume{T}
+function HyperCubeVolume(
+    origin::Vector{T},
+    edgelength::T
+)::HyperRectVolume{T} where {T<:AbstractFloat}
+
     dim = length(origin)
     lo = Vector{T}(dim)
     hi = Vector{T}(dim)
@@ -21,11 +25,22 @@ end
 
 resizes a hypercube shaped spatial volume
 """
-function HyperCubeVolume!{T<:AbstractFloat}(rect::HyperRectVolume{T}, neworigin::Vector{T}, newedgelength::T)
+function HyperCubeVolume!(
+    rect::HyperRectVolume{T},
+    neworigin::Vector{T},
+    newedgelength::T
+) where {T<:AbstractFloat}
+
     _setcubeboundaries!(rect.lo, rect.hi, neworigin, newedgelength)
 end
 
-@inline function _setcubeboundaries!{T<:AbstractFloat}(lo::Vector{T}, hi::Vector{T}, origin::Vector{T}, edgelength::T)
+@inline function _setcubeboundaries!(
+    lo::Vector{T},
+    hi::Vector{T},
+    origin::Vector{T},
+    edgelength::T
+) where {T<:AbstractFloat}
+
     for i = 1:length(lo)
         lo[i] = origin[i] - edgelength * 0.5
         hi[i] = origin[i] + edgelength * 0.5
@@ -33,17 +48,25 @@ end
 end
 
 """
-    find_hypercube_centers(dataset::DataSet{T, I}, datatree::Tree, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{I}
+    find_hypercube_centers(dataset::DataSet{T, I}, datatree::DataTree{T, I}, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{I}
 
 finds possible starting points for the hyperrectangle creation
 """
-function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I},
-        whiteningresult::WhiteningResult{T}, settings::HMIntegrationSettings)::Vector{I}
+function find_hypercube_centers(
+    dataset::DataSet{T, I},
+    datatree::DataTree{T, I},
+    whiteningresult::WhiteningResult{T},
+    settings::HMIntegrationSettings
+)::Vector{I} where {T<:AbstractFloat, I<:Integer}
+
     weights = [T(-Inf) for i=1:dataset.N]
 
     sortLogProb = sortperm(dataset.logprob, rev = true)
 
     NMax = round(I, sqrt(dataset.N) * settings.max_startingIDs_fraction)
+    if NMax < 2 * settings.warning_minstartingids
+        NMax = min(2 * settings.warning_minstartingids, dataset.N)
+    end
     @log_msg LOG_DEBUG "Considered starting Points $NMax"
 
     ignorePoint = falses(dataset.N)
@@ -101,11 +124,23 @@ function find_hypercube_centers{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T
     return sortIdx[1:NMax]
 end
 
-function find_density_test_cube_edgelength{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, dataset::DataSet{T, I}, datatree::Tree{T, I}, points::I = 100)
+function find_density_test_cube_edgelength(
+    mode::Vector{T},
+    dataset::DataSet{T, I},
+    datatree::DataTree{T, I},
+    points::I = 100
+)::T where {T<:AbstractFloat, I<:Integer}
+
     return find_density_test_cube(mode, dataset, datatree, points)[1]
 end
 
-function find_density_test_cube{T<:AbstractFloat, I<:Integer}(mode::Vector{T}, dataset::DataSet{T, I}, datatree::Tree{T, I}, points::I)
+function find_density_test_cube(
+    mode::Vector{T},
+    dataset::DataSet{T, I},
+    datatree::DataTree{T, I},
+    points::I
+)::Tuple{T, IntegrationVolume{T, I}} where {T<:AbstractFloat, I<:Integer}
+
     P = dataset.P
 
     l::T = 1.0

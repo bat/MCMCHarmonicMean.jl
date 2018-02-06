@@ -1,6 +1,6 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
-
+abstract type SearchTree end
 
 """
     DataSet{T<:AbstractFloat, I<:Integer}
@@ -34,11 +34,8 @@ end
 function DataSet{T<:AbstractFloat}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
     return DataSet{T, Int64}(data, logprob, weights, size(data)[2], size(data)[1])
 end
-
-function Base.show(io::IO, data::DataSet)
-    print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
-end
-
+Base.show(io::IO, data::DataSet) = print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
+Base.eltype(data::DataSet{T, I}) where {T<:AbstractFloat, I<:Integer} = (T, I)
 
 """
     HMIntegrationSettings
@@ -64,17 +61,15 @@ mutable struct HMIntegrationSettings
     max_startingIDs::Integer
     max_startingIDs_fraction::AbstractFloat
     rect_increase::AbstractFloat
-    tolerance_mult::AbstractFloat
-    determinant_PreWhitening::AbstractFloat
     stop_ifenoughpoints::Bool
     skip_centerIDsinsideHyperRects::Bool
     useMultiThreading::Bool
     warning_minstartingids::Integer
     userectweights::Bool
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, 1.0, 1.0, true, true, true, 16, true)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, 1.0, 1.0, false, false, true, 16, true)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, 1.0, 1.0, false, false, true, 16, true)
+HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, true, true, true, 16, true)
+HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, false, false, true, 16, true)
+HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, false, false, true, 16, true)
 
 """
     WhiteningResult{T<:AbstractFloat}
@@ -93,10 +88,7 @@ struct WhiteningResult{T<:AbstractFloat}
     whiteningmatrix::Matrix{T}
     meanvalue::Vector{T}
 end
-
-function Base.show(io::IO, wres::WhiteningResult)
-    print(io, "Whitening Result: Determinant: $(wres.determinant), Target Prob. Factor: $(wres.targetprobfactor)")
-end
+Base.show(io::IO, wres::WhiteningResult) = print(io, "Whitening Result: Determinant: $(wres.determinant), Target Prob. Factor: $(wres.targetprobfactor)")
 
 
 """
@@ -126,10 +118,7 @@ function SearchResult(T::DataType, I::DataType)
     @assert I<:Integer
     return SearchResult{T, I}(Vector{I}(0), I(0), T(0), T(0), T(0), T(0))
 end
-
-function Base.show(io::IO, sres::SearchResult)
-    print(io, "Search Result: Points: $(sres.points), Max. Log. Prob.: $(sres.maxLogProb), Min. Log. Prob.: $(sres.minLogProb)")
-end
+Base.show(io::IO, sres::SearchResult) = print(io, "Search Result: Points: $(sres.points), Max. Log. Prob.: $(sres.maxLogProb), Min. Log. Prob.: $(sres.minLogProb)")
 
 
 """
@@ -157,10 +146,7 @@ mutable struct PointCloud{T<:AbstractFloat, I<:Integer}
     points::I
     pointIDs::Vector{I}
 end
-
-function Base.show(io::IO, cloud::PointCloud)
-    print(io, "Point Cloud with $(cloud.points) points, probability factor: $(cloud.probfactor)")
-end
+Base.show(io::IO, cloud::PointCloud) = print(io, "Point Cloud with $(cloud.points) points, probability factor: $(cloud.probfactor)")
 
 
 """
@@ -179,9 +165,7 @@ mutable struct IntegrationVolume{T<:AbstractFloat, I<:Integer}
     spatialvolume::HyperRectVolume{T}
     volume::T
 end
-function Base.show(io::IO, vol::IntegrationVolume)
-    print(io, "Hyperrectangle: $(vol.pointcloud.points) points, $(vol.volume) Volume")
-end
+Base.show(io::IO, vol::IntegrationVolume) = print(io, "Hyperrectangle: $(vol.pointcloud.points) points, $(vol.volume) Volume")
 
 
 
@@ -191,14 +175,12 @@ struct IntermediateResult{T<:AbstractFloat}
     points::T
     volume::T
 end
-
-function Base.show(io::IO, ires::IntermediateResult)
+Base.show(io::IO, ires::IntermediateResult) =
     print(io, "Rectangle Integration Result: $(ires.integral) +- $(ires.error), average Points: $(ires.points), average Volume: $(ires.volume)")
-end
 
 
 """
-    IntegrationResult{T<:AbstractFloat, I<:Integer}
+    HMIData{T<:AbstractFloat, I<:Integer}
 
 Includes all the informations of the integration process, including a list of hyper-rectangles, the results of the whitening transformation,
 the starting ids, and the average number of points and volume of the created hyper-rectangles.
@@ -214,19 +196,31 @@ the starting ids, and the average number of points and volume of the created hyp
 - 'whiteningresult::WhiteningResult{T}' : the results of the whitening transformation
 - 'integrals::Vector{T}' : The integral estimates of the different hyper-rectangles
 """
-struct IntegrationResult{T<:AbstractFloat, I<:Integer}
-    integral::T
-    error::T
-    nvols::I
-    points::T
-    volume::T
-    volumelist::Vector{IntegrationVolume{T, I}}
+mutable struct HMIData{T<:AbstractFloat, I<:Integer}
+    dataset::DataSet{T, I}
+    whiteningresult::Nullable{WhiteningResult{T}}
+    datatree::Nullable{SearchTree}
     startingIDs::Vector{I}
     tolerance::T
-    whiteningresult::WhiteningResult{T}
+    volumelist::Vector{IntegrationVolume{T, I}}
+    integral::T
+    error::T
+    points::T
+    volume::T
     integrals::Vector{IntermediateResult}
+    datasetchange::Bool
 end
-
-function Base.show(io::IO, ires::IntegrationResult)
-    print(io, "Integration Result: $(ires.integral) +- $(ires.error), Rectangles: $(ires.nvols), average Points: $(ires.points), average Volume: $(ires.volume)")
+function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
+    return HMIData(
+        dataset,
+        Nullable{WhiteningResult{T}}(),
+        Nullable{SearchTree}(),
+        Vector{I}(0),
+        0.0,
+        Vector{IntegrationVolume{T, I}}(0),
+        0.0, 0.0, 0.0, 0.0,
+        Vector{IntermediateResult}(0),
+        true
+    )
 end
+Base.show(io::IO, ires::HMIData) = print(io, "Integration Result: $(ires.integral) +- $(ires.error), Rectangles: $(length(ires.integrals)), average Points: $(ires.points), average Volume: $(ires.volume)")

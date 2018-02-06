@@ -1,7 +1,14 @@
 
 
 #trims dataset before performing mean and variance calculation to increase stability
-function tmean{T<:AbstractFloat}(x::Vector{T}, params...; tr::T = 0.1, weights::Vector{T} = Vector{T}(0), calculateVar::Bool = false)::Tuple
+function tmean(
+    x::Vector{T},
+    params...;
+    tr::T = 0.1,
+    weights::Vector{T} = Vector{T}(0),
+    calculateVar::Bool = false
+)::Tuple where {T<:AbstractFloat}
+
     if tr < 0 || tr > 0.5
         @log_msg LOG_ERROR "tr is not allowed to be smaller than 0.0 or larger than 0.5"
     end

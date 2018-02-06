@@ -74,8 +74,8 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
     end
 
     maxP = select(dataset.logprob, dataset.N)
-    suggTargetProb = select(dataset.logprob, floor(Int64, dataset.N * 0.5))
-    suggTargetProb = 10 * exp(maxP - suggTargetProb)
+    suggTargetProb = select(dataset.logprob, floor(Int64, dataset.N * 0.2))
+    suggTargetProb = exp(maxP - suggTargetProb)
 
     @log_msg LOG_DEBUG "Determinant:\t" * string(determinant)
     @log_msg LOG_DEBUG "Suggested Target Probability Factor:\t" * string(suggTargetProb)

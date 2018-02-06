@@ -1,7 +1,10 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
-mutable struct Tree{T<:AbstractFloat, I<:Integer}
+mutable struct DataTree{
+    T<:AbstractFloat,
+    I<:Integer
+} <: SearchTree
     Cuts::I
     Leafsize::I
 
@@ -10,18 +13,17 @@ mutable struct Tree{T<:AbstractFloat, I<:Integer}
     CutList::Vector{T}
 end
 
-function create_search_tree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, MinCuts::I = 8, MaxLeafsize::I = 200)::Tree{T, I}
-    suggCuts = (dataset.N / MaxLeafsize)^(1.0 / dataset.P)
+function create_search_tree(dataset::DataSet{T, I}, MinCuts::I = 8, MaxLeafsize::I = 200)::DataTree{T, I} where {T<:AbstractFloat, I<:Integer}
+    suggCuts = (dataset.N / MaxLeafsize) ^ (1 / dataset.P)
     Cuts = ceil(I, max(MinCuts, suggCuts))
 
     recDepth = ceil(I, log(dataset.N / MaxLeafsize) / log(Cuts))
 
     #define dimension list
-    local DimensionList::Vector{I}
-    if Cuts > MinCuts
-        DimensionList= [i for i::I = 1:dataset.P]
+    DimensionList = if Cuts > MinCuts
+        [i for i = 1:dataset.P]
     else
-        DimensionList = [i for i::I = 1:recDepth]
+        [i for i = 1:recDepth]
     end
 
     Leafsize = ceil(I, dataset.N / Cuts^recDepth)
@@ -32,7 +34,7 @@ function create_search_tree{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}
         createleafs(dataset, DimensionList, CutList, Cuts, Leafsize, 1)
     end
 
-    return Tree(Cuts, Leafsize, DimensionList, length(DimensionList), CutList)
+    return DataTree(Cuts, Leafsize, DimensionList, length(DimensionList), CutList)
 end
 
 function createleafs{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, DimensionList::Vector{I}, CutList::Vector{T}, Cuts::I, Leafsize::I, StartID::I = 0)
@@ -77,13 +79,36 @@ function createleafs{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, Dimen
     end
 end
 
-function search{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)::SearchResult
+function search{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::DataTree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)::SearchResult
     res = SearchResult(T, I)
+    #searchpoints = false
     search!(res, dataset, datatree, searchvol, searchpoints)
+
+    #check
+    btpoints = 0
+    ids = Vector{Int64}(0)
+    for i = 1:dataset.N
+        inV = true
+        for p=1:dataset.P
+            if dataset.data[p, i] < searchvol.lo[p] || dataset.data[p, i] > searchvol.hi[p]
+                inV = false
+                break
+            end
+        end
+        if inV
+            btpoints += 1
+            append!(ids, i)
+        end
+    end
+    if btpoints != res.points
+        error(btpoints, "\t!=\t", res.points)
+        println(ids)
+        println(res.pointIDs)
+    end
     return res
 end
 
-function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, dataset::DataSet{T, I}, datatree::Tree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)
+function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, dataset::DataSet{T, I}, datatree::DataTree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)
     result.points = 0
     resize!(result.pointIDs, 0)
     result.maxLogProb = -Inf
@@ -176,7 +201,7 @@ function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, datas
 
 end
 
-@inline function getDataPositions{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, TreePos::Vector{I})
+@inline function getDataPositions{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::DataTree{T, I}, TreePos::Vector{I})
     maxRecursion = datatree.RecursionDepth
     startID = 1
     recCntr = maxRecursion
@@ -193,7 +218,7 @@ end
 end
 
 
-function searchInterval!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, dataset::DataSet{T, I}, datatree::Tree{T, I}, searchvol::HyperRectVolume{T}, start::I, stop::I, searchpoints::Bool)
+function searchInterval!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, dataset::DataSet{T, I}, datatree::DataTree{T, I}, searchvol::HyperRectVolume{T}, start::I, stop::I, searchpoints::Bool)
     dimsort = datatree.DimensionList[datatree.RecursionDepth]
 
     for i = start:stop

@@ -3,11 +3,17 @@
 
 
 """
-    IntegrationVolume(dataset::DataSet{T, I}, datatree::Tree{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)::IntegrationVolume{T, I}
+    IntegrationVolume(dataset::DataSet{T, I}, datatree::SearchTree, spvol::HyperRectVolume{T}, searchpts::Bool = true)::IntegrationVolume{T, I}
 
 creates an integration region by calculating the point cloud an the volume of the spatial volume.
 """
-function IntegrationVolume{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::Tree{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)::IntegrationVolume{T, I}
+function IntegrationVolume(
+    dataset::DataSet{T, I},
+    datatree::SearchTree,
+    spvol::HyperRectVolume{T},
+    searchpts::Bool = true
+)::IntegrationVolume{T, I} where {T<:AbstractFloat, I<:Integer}
+
     cloud = PointCloud(dataset, datatree, spvol, searchpts)
     vol = prod(spvol.hi - spvol.lo)
 
@@ -16,11 +22,18 @@ end
 
 
 """
-    IntegrationVolume!(intvol::IntegrationVolume{T, I}, dataset::DataSet{T, I}, datatree::Tree{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)
+    IntegrationVolume!(intvol::IntegrationVolume{T, I}, dataset::DataSet{T, I}, datatree::SearchTree, spvol::HyperRectVolume{T}, searchpts::Bool = true)
 
 updates an integration volume with new boundaries. Recalculates the pointcloud and volume.
 """
-function IntegrationVolume!{T<:AbstractFloat, I<:Integer}(intvol::IntegrationVolume{T, I}, dataset::DataSet{T, I}, datatree::Tree{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)
+function IntegrationVolume!(
+    intvol::IntegrationVolume{T, I},
+    dataset::DataSet{T, I},
+    datatree::SearchTree,
+    spvol::HyperRectVolume{T},
+    searchpts::Bool = true
+) where {T<:AbstractFloat, I<:Integer}
+
     if ndims(intvol.spatialvolume) != ndims(spvol)
         intvol.spatialvolume = deepcopy(spvol)
     else
@@ -32,7 +45,12 @@ function IntegrationVolume!{T<:AbstractFloat, I<:Integer}(intvol::IntegrationVol
     intvol.volume = prod(spvol.hi - spvol.lo)
 end
 
-function shrink_integrationvol!{T<:AbstractFloat, I<:Integer}(volume::IntegrationVolume{T, I}, dataset::DataSet{T, I}, newrect::HyperRectVolume{T})
+function shrink_integrationvol!(
+    volume::IntegrationVolume{T, I},
+    dataset::DataSet{T, I},
+    newrect::HyperRectVolume{T}
+) where {T<:AbstractFloat, I<:Integer}
+
     i = volume.pointcloud.points
     for _ in eachindex(volume.pointcloud.pointIDs)
         inV = true
@@ -52,14 +70,69 @@ function shrink_integrationvol!{T<:AbstractFloat, I<:Integer}(volume::Integratio
     volume.volume = prod(newrect.hi .- newrect.lo)
 end
 
+function update!(
+    volume::IntegrationVolume{T, I},
+    dataset::DataSet{T, I},
+    datatree::DataTree{T, I}
+    ) where {T<:AbstractFloat, I<:Integer}
 
-function resize_integrationvol{T<:AbstractFloat, I<:Integer}(original::IntegrationVolume{T, I}, dataset::DataSet{T, I}, datatree::Tree{T, I},
-        changed_dim::I, newrect::HyperRectVolume{T}, searchpts::Bool = false)::IntegrationVolume{T, I}
+    res = search(dataset, datatree, volume.spatialvolume, true)
+
+    _update!(volume, res, false, true)
+
+    #volume.volume doesn't change
+    volume.pointcloud.probfactor = exp(volume.pointcloud.maxLogProb - volume.pointcloud.minLogProb)
+    volume.pointcloud.probweightfactor = exp(volume.pointcloud.maxWeightProb - volume.pointcloud.minWeightProb)
+
+    @log_msg LOG_DEBUG "Hyperrectangle updated. Points:\t$(volume.pointcloud.points)\tVolume:\t$(volume.volume)\tProb. Factor:\t$(volume.pointcloud.probfactor)"
+end
+
+function _update!(
+    volume::IntegrationVolume{T, I},
+    searchres::SearchResult{T, I},
+    addpts::Bool, #if true adds the points to the volume, if false assumes to replace the points in the volume
+    searchpts::Bool
+) where {T<:AbstractFloat, I<:Integer}
+
+    volume.pointcloud.points = searchres.points + (addpts ? volume.pointcloud.points : 0)
+
+    volume.pointcloud.maxLogProb = volume.pointcloud.maxLogProb > searchres.maxLogProb && addpts ? volume.pointcloud.maxLogProb : searchres.maxLogProb
+    volume.pointcloud.minLogProb = volume.pointcloud.minLogProb < searchres.minLogProb && addpts ? volume.pointcloud.minLogProb : searchres.minLogProb
+
+    volume.pointcloud.maxWeightProb = volume.pointcloud.maxWeightProb > searchres.maxWeightProb && addpts ? volume.pointcloud.maxWeightProb : searchres.maxWeightProb
+    volume.pointcloud.minWeightProb = volume.pointcloud.minWeightProb < searchres.minWeightProb && addpts ? volume.pointcloud.minWeightProb : searchres.minWeightProb
+
+    if searchpts
+        start = addpts ? length(volume.pointcloud.pointIDs) + 1 : 1
+        resize!(volume.pointcloud.pointIDs, volume.pointcloud.points)
+        copy!(volume.pointcloud.pointIDs, start, searchres.pointIDs, 1)
+    end
+
+end
+
+function resize_integrationvol(
+    original::IntegrationVolume{T, I},
+    dataset::DataSet{T, I},
+    datatree::DataTree{T, I},
+    changed_dim::I,
+    newrect::HyperRectVolume{T},
+    searchpts::Bool = false
+)::IntegrationVolume{T, I} where {T<:AbstractFloat, I<:Integer}
+
     result = deepcopy(original)
     return resize_integrationvol!(result, original, dataset, datatre, changed_dim, newrect, searchpts)
 end
-function resize_integrationvol!{T<:AbstractFloat, I<:Integer}(result::IntegrationVolume{T, I}, original::IntegrationVolume{T, I}, dataset::DataSet{T, I}, datatree::Tree{T, I},
-        changed_dim::I, newrect::HyperRectVolume{T}, searchpts::Bool, searchVol::HyperRectVolume{T})
+
+function resize_integrationvol!(
+    result::IntegrationVolume{T, I},
+    original::IntegrationVolume{T, I},
+    dataset::DataSet{T, I},
+    datatree::DataTree{T, I},
+    changed_dim::I,
+    newrect::HyperRectVolume{T},
+    searchpts::Bool,
+    searchVol::HyperRectVolume{T}
+) where {T<:AbstractFloat, I<:Integer}
 
     copy!(searchVol, newrect)
     increase = true
@@ -88,18 +161,7 @@ function resize_integrationvol!{T<:AbstractFloat, I<:Integer}(result::Integratio
     if increase
         res = search(dataset, datatree, searchVol, searchpts)
 
-        result.pointcloud.points = original.pointcloud.points + res.points
-
-        if searchpts
-            resize!(result.pointcloud.pointIDs, result.pointcloud.points)
-            copy!(result.pointcloud.pointIDs, original.pointcloud.pointIDs)
-            copy!(result.pointcloud.pointIDs, original.pointcloud.points + 1, res.pointIDs, 1)
-        end
-
-        result.pointcloud.maxLogProb = max(original.pointcloud.maxLogProb, res.maxLogProb)
-        result.pointcloud.minLogProb = max(original.pointcloud.minLogProb, res.minLogProb)
-        result.pointcloud.maxWeightProb = max(original.pointcloud.maxWeightProb, res.maxWeightProb)
-        result.pointcloud.minWeightProb = max(original.pointcloud.minWeightProb, res.minWeightProb)
+        _update!(result, res, true, searchpts)
     else
         res = search(dataset, datatree, searchVol, searchpts)
         result.pointcloud.points = original.pointcloud.points - res.points
@@ -116,7 +178,11 @@ function resize_integrationvol!{T<:AbstractFloat, I<:Integer}(result::Integratio
     copy!(result.spatialvolume, newrect)
 end
 
-function Base.copy!{T<:AbstractFloat, I<:Integer}(target::IntegrationVolume{T, I}, src::IntegrationVolume{T, I})
+function Base.copy!(
+    target::IntegrationVolume{T, I},
+    src::IntegrationVolume{T, I}
+) where {T<:AbstractFloat, I<:Integer}
+
     target.volume = src.volume
 
     copy!(target.spatialvolume, src.spatialvolume)
@@ -126,7 +192,11 @@ function Base.copy!{T<:AbstractFloat, I<:Integer}(target::IntegrationVolume{T, I
 end
 
 #remove as soon as BAT2 has a copy! function
-function Base.copy!{T<:AbstractFloat}(target::HyperRectVolume{T}, src::HyperRectVolume{T})
+function Base.copy!(
+    target::HyperRectVolume{T},
+    src::HyperRectVolume{T}
+) where {T<:AbstractFloat}
+
     p = ndims(src)
     resize!(target.lo, p)
     copy!(target.lo, src.lo)
