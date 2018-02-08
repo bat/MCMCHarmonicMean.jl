@@ -5,25 +5,30 @@ using ROOTFramework, Cxx
 using HDF5
 using ProgressMeter
 
+using BAT.Logging
+@enable_logging
+
 using MCMCHarmonicMean
+export root2hdf5
 
 function root2hdf5(
     T::DataType,
     path::String;
-    params::Array{String} = Array{String}(0),
-    range = Colon(),
-    treename::String = ""
+    treename::String = "",
+    parametertreename::String = ""
 )
 
     if treename == ""
         treename = convert(String, split(split(path, ".")[1], "/")[end])
-        @log_msg LOG_INFO "Tree name: $treename"
+        @log_msg LOG_INFO "MCMC tree name: $treename"
+    end
+    if parametertreename == ""
+        parametertreename = split(treename, "_mcmc")[1] * "_parameters"
+        @log_msg LOG_INFO "Parameters tree name: $parametertreename"
     end
 
-    if length(params) == 0
-        params = read_params(path, treename)
-        @log_msg LOG_INFO "Parameter names: $params"
-    end
+    params = read_params(path, parametertreename)
+    @log_msg LOG_INFO "Parameter names: $params"
 
     filename_hdf5 = path[1:end-5] * ".h5"
 
@@ -43,7 +48,7 @@ function root2hdf5(
 
     open(TChainInput, bindings, treename, filename_root) do input
         n = length(input)
-        info("$input has $n entries.")
+        @log_msg LOG_INFO "Reading ROOT File"
         hdf5_arrays = [zeros(Float32, n) for _ in valnames]::Array{Array{Float32,1},1}
         i = 0
         @showprogress for _ in input
@@ -62,14 +67,27 @@ function root2hdf5(
             chunk_size = max(n, 16*1024)
             dsargs = ("chunk", (chunk_size,), "compress", 6)
 
+            @log_msg LOG_INFO "Writing data to HDF5 file"
+            constants = Vector{Int64}(0)
             @showprogress for j in eachindex(valnames, hdf5_arrays)
                 #check for constants
-                if max(hdf5_arrays[j]) == min(hdf5_arrays[j])
-                    @log_msg LOG_INFO "Skipping constant $(valnames[j])"
+                max_value = maximum(hdf5_arrays[j])
+                min_value = minimum(hdf5_arrays[j])
+                if max_value == min_value
+                    @log_msg LOG_INFO "Skipping constant $j: \t$(valnames[j])"
+                    append!(constants, j)
+                    continue
                 end
 
                 file[string(valnames[j]), dsargs...] = hdf5_arrays[j]
             end
+            for k = 1:length(constants)
+                deleteat!(valnames, constants[length(constants)-k+1])
+                @log_msg LOG_INFO "Delte constant $(length(constants)-k+1)"
+            end
+            write(file, "N", n)
+            write(file, "P", length(valnames) - 4)
+            write(file, "parameter_names", string.(valnames))
         end
     end
 end

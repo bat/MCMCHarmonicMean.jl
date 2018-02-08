@@ -1,49 +1,30 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
-export load_mcmc_data
-
-function load_mcmc_data(
-    path::String,
-    params::Array{String},
-    range = Colon(),
-    treename::String = "",
-    dataFormat::DataType = Float64
-)::DataSet
-
-    ending = split(path, ".")[end]
-    local res::DataSet
-
-    if ending == "h5"
-        res = loadhdf5(dataFormat, path, params, range)
-    elseif ending == "root"
-        println("ROOT support disabled. use root_interface.jl for conversion to HDF5")
-    else
-        println("File ending not supported. Use *.root or *.h5")
-    end
-    return res
-end
+export loadhdf5
 
 function loadhdf5(
     T::DataType,
-    path::String,
-    params::Array{String},
-    range
+    path::String
 )::DataSet
 
     file = h5open(path, "r")
 
-    data_1st = file[params[1]][range]
-    N = length(data_1st)
-    P = length(params)
+    N = read(file, "N")#length(data_1st)
+    P = read(file, "P")#length(params)
+
+    params = read(file, "parameter_names")
+
     @log_msg LOG_INFO "File $path \thas $N data points with $P parameters"
+    @log_msg LOG_INFO "File Parameter Names: $params"
     data = Matrix{T}(P, N)
-    data[1, :] = data_1st
-    @showprogress for i in 2:length(params)
-        data[i, :] = file[params[i]][range]
+
+    @showprogress for i = 1:P
+        data[i, :] = read(file, params[i])
     end
-    LogProbability = convert(Vector{T}, file["LogProbability"][range])
-    #LogLikelihood = file["LogLikelihood"][range]
-    Chain = convert(Array{Int64, 1}, file["Chain"][range])
+    LogProbability = convert(Vector{T}, read(file, "LogProbability"))
+    #LogLikelihood = file["LogLikelihood"]
+    #LogPrior = file["LogPrior"]
+    Chain = convert(Array{Int64, 1}, read(file, "Chain"))
 
     @log_msg LOG_DEBUG "Finding Duplicates to generate weighted samples"
     chains = 1
@@ -53,7 +34,7 @@ function loadhdf5(
         end
     end
     chains += 1
-    weights = zeros(N)
+    weights = zeros(T, N)
     lastIndex = zeros(Int64, chains)
     removedPoints = 0
 
