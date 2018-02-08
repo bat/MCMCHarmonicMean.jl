@@ -16,14 +16,14 @@ function data_whitening{T<:AbstractFloat, I<:Integer}(method::Symbol, dataset::D
 end
 
 function no_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
-    datamean = Array{Float64}(0)
+    datamean = Vector{T}(0)
 
-    return transform_data(dataset, eye(dataset.P), datamean)
+    return transform_data(dataset, eye(T, dataset.P), datamean)
 end
 
 
 function cholesky_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
-    datamean = zeros(dataset.P)
+    datamean = zeros(T, dataset.P)
 
     for p in eachindex(datamean)
         datamean[p] = mean(view(dataset.data, p, :))
@@ -37,13 +37,13 @@ function cholesky_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}
     covmatrix = cov(transpose(dataset.data), FrequencyWeights(dataset.weights), corrected=true)
     covmatrix_inv = inv(Symmetric(covmatrix))
     w = chol(covmatrix_inv)
-    wres = convert(Array{Float64, 2}, w)
+    wres = convert(Matrix{T}, w)
 
     return transform_data(dataset, wres, datamean)
 end
 
 function statistical_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
-    datamean = zeros(dataset.P)
+    datamean = zeros(T, dataset.P)
 
     for p in eachindex(datamean)
         datamean[p] = mean(view(dataset.data, p, :))
@@ -57,15 +57,15 @@ function statistical_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T,
     w_d = transpose(E)
     D = Diagonal(inv(E) * covmatrix * E)
     w = inv(full(sqrt.(D))) * w_d
-    wres = convert(Array{Float64, 2}, w)
+    wres = convert(Matrix{T}, w)
 
     return transform_data(dataset, wres, datamean)
 end
 
 function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W::Matrix{T}, datamean::Vector{T})::WhiteningResult{T}
-    local determinant::Float64
+    local determinant::T
 
-    if W == eye(dataset.P)
+    if W == eye(T, dataset.P)
         determinant = 1.0
     else
         dataset.data = W * dataset.data
@@ -73,9 +73,8 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
         determinant = abs(det(W))
     end
 
-    maxP = select(dataset.logprob, dataset.N)
-    suggTargetProb = select(dataset.logprob, floor(Int64, dataset.N * 0.2))
-    suggTargetProb = exp(maxP - suggTargetProb)
+    maxP::T = select(dataset.logprob, dataset.N)
+    suggTargetProb::T = exp(maxP - select(dataset.logprob, floor(Int64, dataset.N * 0.2)))
 
     @log_msg LOG_DEBUG "Determinant:\t" * string(determinant)
     @log_msg LOG_DEBUG "Suggested Target Probability Factor:\t" * string(suggTargetProb)

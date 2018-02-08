@@ -153,7 +153,8 @@ function resize_integrationvol!(
             searchVol.hi[changed_dim] = original.spatialvolume.hi[changed_dim]
             searchVol.lo[changed_dim] = newrect.hi[changed_dim]
         else
-            @log_msg LOG_ERROR "resize_integrationvol(): Volume didn't change."
+            #check if pts inside vol are corrected
+            @log_msg LOG_ERROR "resize_integrationvol(): Volume $original didn't change.", searchVol.lo[changed_dim], "\n", searchVol.hi[changed_dim], "\n", original.spatialvolume.lo[changed_dim], "\n", original.spatialvolume.hi[changed_dim]
         end
     end
 

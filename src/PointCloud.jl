@@ -8,14 +8,14 @@ creates a point cloud by searching the data tree for points which are inside the
 The parameter searchpts determines if an array of the point IDs is created as well
 """
 function PointCloud{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::SearchTree, hyperrect::HyperRectVolume{T}, searchpts::Bool)::PointCloud
-    result = PointCloud()
+    result = PointCloud(T, I)
 
     PointCloud!(result, dataset, datatree, hyperrect, searchpts)
     return result
 end
 
-function PointCloud()::PointCloud
-    return PointCloud(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, Array{Int64}(0))
+function PointCloud(T::DataType, I::DataType)::PointCloud
+    return PointCloud(T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), I(0), Vector{I}(0))
 end
 
 function PointCloud!{T<:AbstractFloat, I<:Integer}(cloud::PointCloud{T, I}, dataset::DataSet{T, I}, datatree::SearchTree, hyperrect::HyperRectVolume{T}, searchpts::Bool)

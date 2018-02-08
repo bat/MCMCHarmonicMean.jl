@@ -4,12 +4,12 @@
 function tmean(
     x::Vector{T},
     params...;
-    tr::T = 0.1,
+    tr::T = T(0.1),
     weights::Vector{T} = Vector{T}(0),
     calculateVar::Bool = false
 )::Tuple where {T<:AbstractFloat}
 
-    if tr < 0 || tr > 0.5
+    if tr < 0.0 || tr > 0.5
         @log_msg LOG_ERROR "tr is not allowed to be smaller than 0.0 or larger than 0.5"
     end
     for i in eachindex(params)
@@ -40,5 +40,5 @@ function tmean(
             variances[i] = norm ? var(params[i-1][perm][lo:hi], FrequencyWeights(params[i-1][perm][lo:hi]), corrected = true) : var(params[i-1][perm][lo:hi])
         end
     end
-    return ((norm ? mean(x[perm][lo:hi], FrequencyWeights(weights[perm][lo:hi])) : mean(x[perm][lo:hi])), additionalreturns..., variances...)
+    return ((norm ? T(mean(x[perm][lo:hi], FrequencyWeights(weights[perm][lo:hi]))) : mean(T, x[perm][lo:hi])), additionalreturns..., variances...)
 end

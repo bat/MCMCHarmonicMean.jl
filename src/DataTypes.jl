@@ -218,9 +218,9 @@ function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat,
         Nullable{WhiteningResult{T}}(),
         Nullable{SearchTree}(),
         Vector{I}(0),
-        0.0,
+        T(0.0),
         Vector{IntegrationVolume{T, I}}(0),
-        0.0, 0.0, 0.0, 0.0,
+        T(0.0), T(0.0), T(0.0), T(0.0),
         Vector{IntermediateResult}(0),
         true
     )

@@ -399,13 +399,13 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
 
     spvol::HyperRectVolume{T} = deepcopy(vol.spatialvolume)
     searchvol::HyperRectVolume{T} = deepcopy(spvol)
-    buffer::T = 0.0
 
     const increase_default::T = settings.rect_increase
     increase = increase_default
     decrease = 1.0 - 1.0 / (1.0 + increase)
 
     const min_points = 20
+    const max_iterations_per_dim = 5
 
     while wasCubeChanged && vol.pointcloud.probfactor > 1.0
 
@@ -429,7 +429,10 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
 
             #adjust lower bound
             change1 = 2
-            while change1 != 0 && vol.pointcloud.probfactor > 1.0
+            iteration_per_dimension = 0
+            while change1 != 0 && vol.pointcloud.probfactor > 1.0 && iteration_per_dimension < max_iterations_per_dim
+                iteration_per_dimension += 1
+
                 margin = spvol.hi[p] - spvol.lo[p]
                 buffer = spvol.lo[p]
                 spvol.lo[p] -= margin * increase
@@ -444,8 +447,10 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                     change = true
                     change1 = 1
                     @log_msg LOG_TRACE "lo inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
-                elseif vol.pointcloud.points > 100 * (1 + increase)
-                    #revert changes
+                elseif vol.pointcloud.points > 100 * (1 + increase) && margin > 0.01 * vol.volume^(1.0 / dataset.P)
+                    #revert changes - important to also partially revert newvol, because resize_integrationvol function calls update! function which updates the points
+                    #by adding only the new number of new points and not by overwriting
+                    newvol.pointcloud.points = vol.pointcloud.points
                     spvol.lo[p] = buffer
 
                     margin = spvol.hi[p] - spvol.lo[p]
@@ -465,11 +470,12 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                         @log_msg LOG_TRACE "lo dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                     else
                         #revert changes
+                        newvol.pointcloud.points = vol.pointcloud.points
                         spvol.lo[p] = buffer
                         change1 = 0
                     end
                 #if there are only very few points, accept if there are points added.
-            elseif vol.pointcloud.points < 100 && newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > 1.0 && change1 != -1
+                elseif vol.pointcloud.points < 100 && newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > 1.0 && change1 != -1
                     copy!(vol, newvol)
                     wasCubeChanged = true
                     change = true
@@ -477,6 +483,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                     @log_msg LOG_TRACE "(sr) lo inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                 else
                     #revert changes
+                    newvol.pointcloud.points = vol.pointcloud.points
                     spvol.lo[p] = buffer
                     change1 = 0
                 end
@@ -484,7 +491,9 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
 
             #adjust upper bound
             change2 = 2
-            while change2!= 0 && vol.pointcloud.probfactor > 1.0
+            iteration_per_dimension = 0
+            while change2!= 0 && vol.pointcloud.probfactor > 1.0 && iteration_per_dimension < max_iterations_per_dim
+                iteration_per_dimension += 1
                 margin = spvol.hi[p] - spvol.lo[p]
                 buffer = spvol.hi[p]
                 spvol.hi[p] += margin * increase
@@ -499,8 +508,9 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                     change = true
                     change2 = 1
                     @log_msg LOG_TRACE "up inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
-                elseif vol.pointcloud.points > 100 * (1 + increase)
+                elseif vol.pointcloud.points > 100 * (1 + increase) && margin > 0.01 * vol.volume^(1.0 / dataset.P)
                     #revert changes
+                    newvol.pointcloud.points = vol.pointcloud.points
                     spvol.hi[p] = buffer
 
                     margin = spvol.hi[p] - spvol.lo[p]
@@ -520,11 +530,12 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                         @log_msg LOG_TRACE "up dec p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                     else
                         #revert changes
+                        newvol.pointcloud.points = vol.pointcloud.points
                         spvol.hi[p] = buffer
                         change2 = 0
                     end
                 #if there are only very few points, accept if there are points added.
-            elseif vol.pointcloud.points < 100 && newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > 1.0 && change2 != -1
+                elseif vol.pointcloud.points < 100 && newvol.pointcloud.probfactor < whiteningresult.targetprobfactor && PtsIncrease > 1.0 && change2 != -1
                     copy!(vol, newvol)
                     wasCubeChanged = true
                     change = true
@@ -532,6 +543,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
                     @log_msg LOG_TRACE "(sr) up inc p=$p Hyperrectangle Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)\tPtsIncrease=$PtsIncrease"
                 else
                     #revert changes
+                    newvol.pointcloud.points = vol.pointcloud.points
                     spvol.hi[p] = buffer
                     change2 = 0
                 end
@@ -586,8 +598,8 @@ function integrate_hyperrectangle(
     end
 
     #no division by sqrt(11) because if empty volume is included the results are not expected to be equal. -> helps finding volumes with empty volume if error is high
-    error = nsmallervols < 2 ? 0.0 : sqrt(var(integrals))
-    integral = mean(integrals)
+    error::T = nsmallervols < 2 ? 0.0 : sqrt(var(integrals))
+    integral::T = mean(integrals)
 
     @log_msg LOG_DEBUG "Integral: $integral\tError: $error"
 
