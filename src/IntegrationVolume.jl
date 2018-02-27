@@ -52,12 +52,17 @@ function shrink_integrationvol!(
 ) where {T<:AbstractFloat, I<:Integer}
 
     i = volume.pointcloud.points
-    for _ in eachindex(volume.pointcloud.pointIDs)
+    for j = 1:i
         inV = true
         for p = 1:dataset.P
+            try
             if dataset.data[p, volume.pointcloud.pointIDs[i]] < newrect.lo[p] || dataset.data[p, volume.pointcloud.pointIDs[i]] > newrect.hi[p]
                 inV = false
                 break
+            end
+            catch e
+                println(volume.pointcloud.pointIDs, "\n", i, "\t", length(volume.pointcloud.pointIDs), "\t", volume.pointcloud.points)
+                throw(e)
             end
         end
         if !inV

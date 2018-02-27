@@ -109,8 +109,6 @@ scatter(result.dataset.data[1, :], result.dataset.data[2, :], c=:red, marker=:ci
 
 for vol in result.volumelist
     points = Array{Float64, 2}(2, 5)
-    xids = [1,1,2,2,1]
-    yids = [1,2,2,1,1]
     points[:, 1] = [vol.spatialvolume.lo[1], vol.spatialvolume.lo[2]]
     points[:, 2] = [vol.spatialvolume.lo[1], vol.spatialvolume.hi[2]]
     points[:, 3] = [vol.spatialvolume.hi[1], vol.spatialvolume.hi[2]]

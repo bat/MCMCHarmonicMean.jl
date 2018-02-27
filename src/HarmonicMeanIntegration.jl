@@ -150,21 +150,21 @@ function hm_integrate(
 
     @log_msg LOG_INFO "Integrating $nRes Hyperrectangles"
 
-    progressbar = Progress(length(nRes))
+    progressbar2 = Progress(length(nRes))
     if settings.useMultiThreading
-        @threads for i in 1:nRes
+        @threads for i = 1:nRes
             IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant, settings.nvolumerand)
             lock(BAT.Logging._global_lock) do
-                next!(progressbar)
+                next!(progressbar2)
             end
         end
     else
-        for i in 1:nRes
+        for i = 1:nRes
             IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant, settings.nvolumerand)
-            next!(progressbar)
+            next!(progressbar2)
         end
     end
-    finish!(progressbar)
+    finish!(progressbar2)
 
 
 
