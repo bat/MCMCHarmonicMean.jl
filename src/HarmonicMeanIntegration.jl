@@ -189,8 +189,6 @@ function hm_integrate(
         end
     end
 
-    @assert length(volumes) == length(IntResults)
-
     nRes = length(IntResults)
 
     local rectweights::Vector{T}
@@ -555,6 +553,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
     res = search(dataset, datatree, vol.spatialvolume, true)
     resize!(vol.pointcloud.pointIDs, res.points)
     copy!(vol.pointcloud.pointIDs, res.pointIDs)
+    vol.pointcloud.points = res.points
     vol.pointcloud.maxLogProb = res.maxLogProb
     vol.pointcloud.minLogProb = res.minLogProb
     vol.pointcloud.probfactor = exp(vol.pointcloud.maxLogProb - vol.pointcloud.minLogProb)

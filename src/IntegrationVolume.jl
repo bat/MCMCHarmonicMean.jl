@@ -55,14 +55,9 @@ function shrink_integrationvol!(
     for j = 1:i
         inV = true
         for p = 1:dataset.P
-            try
             if dataset.data[p, volume.pointcloud.pointIDs[i]] < newrect.lo[p] || dataset.data[p, volume.pointcloud.pointIDs[i]] > newrect.hi[p]
                 inV = false
                 break
-            end
-            catch e
-                println(volume.pointcloud.pointIDs, "\n", i, "\t", length(volume.pointcloud.pointIDs), "\t", volume.pointcloud.points)
-                throw(e)
             end
         end
         if !inV
@@ -107,7 +102,7 @@ function _update!(
     volume.pointcloud.maxWeightProb = volume.pointcloud.maxWeightProb > searchres.maxWeightProb && addpts ? volume.pointcloud.maxWeightProb : searchres.maxWeightProb
     volume.pointcloud.minWeightProb = volume.pointcloud.minWeightProb < searchres.minWeightProb && addpts ? volume.pointcloud.minWeightProb : searchres.minWeightProb
 
-    if searchpts
+    if searchpts && searchres.points > 0
         start = addpts ? length(volume.pointcloud.pointIDs) + 1 : 1
         resize!(volume.pointcloud.pointIDs, volume.pointcloud.points)
         copy!(volume.pointcloud.pointIDs, start, searchres.pointIDs, 1)
@@ -163,6 +158,13 @@ function resize_integrationvol!(
         end
     end
 
+
+    result.pointcloud.points = original.pointcloud.points
+    if searchpts
+        if result.pointcloud.pointIDs != original.pointcloud.pointIDs
+            result.pointcloud.pointIDs = deepcopy(original.pointcloud.pointIDs)
+        end
+    end
 
     if increase
         res = search(dataset, datatree, searchVol, searchpts)
