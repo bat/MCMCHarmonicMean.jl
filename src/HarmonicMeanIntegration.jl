@@ -150,7 +150,7 @@ function hm_integrate(
 
     @log_msg LOG_INFO "Integrating $nRes Hyperrectangles"
 
-    progressbar2 = Progress(length(nRes))
+    progressbar2 = Progress(nRes)
     if settings.useMultiThreading
         @threads for i = 1:nRes
             IntResults[i] = integrate_hyperrectangle(dataset, volumes[i], whiteningresult.determinant, settings.nvolumerand)
