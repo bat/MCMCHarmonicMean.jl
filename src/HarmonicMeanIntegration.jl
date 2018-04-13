@@ -220,6 +220,7 @@ function hm_integrate(
     @log_msg LOG_INFO "Integration Result:\t $integral +- $(error))\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, pointvar))\t avg. volume: $volume"
     result.integral = integral
     result.error = error
+    result.rectweights = rectweights
     result.points = point
     result.volume = volume
     result.integrals = IntResults
@@ -267,7 +268,7 @@ function findtolerance{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, dat
         @log_msg LOG_WARNING "Tolerance calculation failed. Tolerance is set to default to 1.5"
     end
     suggTol::T = length(tols) < 4 ? 1.5 : tmean(tols)[1]
-    #suggTol = (suggTol - 1) * 4 + 1
+    suggTol = (suggTol - 1) * 4 + 1
 
     return suggTol
 end
@@ -341,7 +342,7 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
     vol = IntegrationVolume(dataset, datatree, cube, true)
 
     while vol.pointcloud.points > 0.01 * dataset.N
-        edgelength *= 0.5
+        edgelength *= 0.5^(1/dataset.P)
         HyperCubeVolume!(cube, Mode, edgelength)
         IntegrationVolume!(vol, dataset, datatree, cube, true)
     end

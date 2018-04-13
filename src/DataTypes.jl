@@ -207,6 +207,7 @@ mutable struct HMIData{T<:AbstractFloat, I<:Integer}
     volumelist::Vector{IntegrationVolume{T, I}}
     integral::T
     error::T
+    rectweights::Vector{T}
     points::T
     volume::T
     integrals::Vector{IntermediateResult}
@@ -220,7 +221,9 @@ function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat,
         Vector{I}(0),
         T(0.0),
         Vector{IntegrationVolume{T, I}}(0),
-        T(0.0), T(0.0), T(0.0), T(0.0),
+        T(0.0), T(0.0),
+        Vector{T}(0),
+        T(0.0), T(0.0),
         Vector{IntermediateResult}(0),
         true
     )
