@@ -403,8 +403,8 @@ function create_hyperrectangle{T<:AbstractFloat, I<:Integer}(Mode::Vector{T}, da
     increase = increase_default
     decrease = 1.0 - 1.0 / (1.0 + increase)
 
-    const min_points = 20
-    const max_iterations_per_dim = 5
+    const min_points = 5
+    const max_iterations_per_dim = 20
 
     while wasCubeChanged && vol.pointcloud.probfactor > 1.0
 

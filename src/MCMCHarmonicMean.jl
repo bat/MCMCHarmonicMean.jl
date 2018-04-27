@@ -7,7 +7,7 @@ module MCMCHarmonicMean
 
 using ProgressMeter
 using Distributions
-using HDF5
+#using HDF5
 using StatsBase
 
 using BAT
