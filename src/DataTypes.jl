@@ -200,6 +200,7 @@ the starting ids, and the average number of points and volume of the created hyp
 """
 mutable struct HMIData{T<:AbstractFloat, I<:Integer}
     dataset::DataSet{T, I}
+    dataset2::Nullable{DataSet{T, I}}
     whiteningresult::Nullable{WhiteningResult{T}}
     datatree::Nullable{SearchTree}
     startingIDs::Vector{I}
@@ -216,6 +217,23 @@ end
 function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
     return HMIData(
         dataset,
+        Nullable{DataSet{T, I}}(),
+        Nullable{WhiteningResult{T}}(),
+        Nullable{SearchTree}(),
+        Vector{I}(0),
+        T(0.0),
+        Vector{IntegrationVolume{T, I}}(0),
+        T(0.0), T(0.0),
+        Vector{T}(0),
+        T(0.0), T(0.0),
+        Vector{IntermediateResult}(0),
+        true
+    )
+end
+
+function HMIData(dataset1::DataSet{T, I}, dataset2::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}    return HMIData(
+        dataset1,
+        Nullable{DataSet{T, I}}(dataset2),
         Nullable{WhiteningResult{T}}(),
         Nullable{SearchTree}(),
         Vector{I}(0),

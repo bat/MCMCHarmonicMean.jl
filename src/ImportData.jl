@@ -1,6 +1,8 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
-
-export loadhdf5
+using BAT.Logging
+using ProgressMeter
+using HDF5
+using MCMCHarmonicMean
 
 function loadhdf5(
     T::DataType,

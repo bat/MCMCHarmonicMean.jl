@@ -33,7 +33,7 @@ end
 function hm_integrate(
     result::HMIData{T, I};
     range = Colon(),
-    settings::HMIntegrationSettings = HMIntegrationStandardSettings()
+    settings::HMIntegrationSettings = HMIntegrationPrecisionSettings()
 )::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
 
     dataset = result.dataset
@@ -84,7 +84,8 @@ function hm_integrate(
 
     maxPoints::I = 0
     totalpoints::I = 0
-    if isempty(result.volumelist)
+    onlyupdate = !isempty(result.volumelist)
+    if !onlyupdate
         @log_msg LOG_INFO "Create Hyperrectangles using $(use_mt ? nthreads() : 1) thread(s)"
         thread_volumes = Vector{IntegrationVolume{T, I}}(length(startingIDs))
 
@@ -108,7 +109,9 @@ function hm_integrate(
                 totalpoints += thread_volumes[i].pointcloud.points
             end
         end
-    else
+    end
+
+    if onlyupdate
         if result.datasetchange @log_msg LOG_INFO "Updating $(length(result.volumelist)) Hyperrectangles using $(use_mt ? nthreads() : 1) thread(s)" end
         #update pointIDs for each integrationvolume
         if use_mt
@@ -130,7 +133,13 @@ function hm_integrate(
     volumes = result.volumelist
     result.datasetchange = false
 
-
+    if !isnull(result.dataset2)
+        result.dataset = get(result.dataset2)
+        result.dataset2 = Nullable{DataSet{T, I}}()
+        result.datatree = Nullable{SearchTree}()
+        result.datasetchange = true
+        return hm_integrate(result, range = range, settings = settings)
+    end
 
     #remove rectangles with less than 1% points of the largest rectangle (in terms of points)
     j = length(volumes)
