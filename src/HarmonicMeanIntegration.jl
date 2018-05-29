@@ -112,7 +112,7 @@ function hm_integrate(
     end
 
     if onlyupdate
-        if result.datasetchange @log_msg LOG_INFO "Updating $(length(result.volumelist)) Hyperrectangles using $(use_mt ? nthreads() : 1) thread(s)" end
+        @log_msg LOG_INFO "Updating $(length(result.volumelist)) Hyperrectangles using $(use_mt ? nthreads() : 1) thread(s)"
         #update pointIDs for each integrationvolume
         if use_mt
             @threads for i in eachindex(result.volumelist)
@@ -134,10 +134,8 @@ function hm_integrate(
     result.datasetchange = false
 
     if !isnull(result.dataset2)
-        result.dataset = get(result.dataset2)
+        hm_swapdata(result, get(result.dataset2))
         result.dataset2 = Nullable{DataSet{T, I}}()
-        result.datatree = Nullable{SearchTree}()
-        result.datasetchange = true
         return hm_integrate(result, range = range, settings = settings)
     end
 
