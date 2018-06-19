@@ -14,37 +14,63 @@ Holds the MCMC output. For construction use constructor: function DataSet{T<:Rea
 - 'P::I' : number of parameters.
 """
 mutable struct DataSet{T<:AbstractFloat, I<:Integer}
-    data::Matrix{T}
-    logprob::Vector{T}
-    weights::Vector{T}
+    data::Array{T, 2}
+    logprob::Array{T, 1}
+    weights::Array{T, 1}
     N::I
     P::I
     iswhitened::Bool
+    isnew::Bool
+    partitioningtree::SearchTree
+    startingIDs::Array{I, 1}
+    tolerance::T
 end
 
-function DataSet(data::Tuple{DensitySampleVector, MCMCSampleIDVector, MCMCBasicStats})
-    return DataSet(data[1])
+function DataSet(
+    data::Tuple{DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}}, MCMCSampleIDVector, MCMCBasicStats}
+    )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
+
+    DataSet(data...)
 end
-function DataSet(data::BAT.DensitySampleVector)
-    T = typeof(data.params[1,1])
-    return DataSet(
-        convert(Matrix{T}, data.params),
-        convert(Vector{T}, data.log_value),
-        convert(Vector{T}, data.weight))
+
+function DataSet(
+    samples::DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}},
+    sampleIDs::MCMCSampleIDVector,
+    mcmcstats::MCMCBasicStats
+    )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
+
+    DataSet(convert(Array{T, 2}, samples.params), samples.log_value, samples.weight)
 end
-function DataSet{T<:AbstractFloat}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
-    return DataSet{T, Int64}(data, logprob, weights, size(data)[2], size(data)[1], false)
+
+function DataSet(
+    data:: Array{T, 2},
+    logprob::Array{T, 1},
+    weights::Array{I, 1}
+    )::DataSet{T, Int64} where {T<:AbstractFloat, I<:Integer}
+
+    DataSet(data, logprob, convert(Array{T, 1}, weights))
 end
+
+function DataSet(
+    data:: Array{T, 2},
+    logprob::Array{T, 1},
+    weights::Array{T, 1}
+    )::DataSet{T, Int64} where {T<:AbstractFloat}
+
+    P, N = size(data)
+    DataSet(data, logprob, weights, N, P, false, true, DataTree(T, Int64), Array{Int64, 1}(0), T(0))
+end
+
 Base.show(io::IO, data::DataSet) = print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
 Base.eltype(data::DataSet{T, I}) where {T<:AbstractFloat, I<:Integer} = (T, I)
 
 """
-    HMIntegrationSettings
+    HMISettings
 
 holds the settings for the hm_integrate function. There are several default constructors available:
-HMIntegrationFastSettings()
-HMIntegrationStandardSettings()
-HMIntegrationPrecisionSettings()
+HMIFastSettings()
+HMIStandardSettings()
+HMIPrecisionSettings()
 
 #Variables
 - 'whitening_method::Symbol' : which whitening method to use
@@ -52,26 +78,22 @@ HMIntegrationPrecisionSettings()
 - 'max_startingIDs_fraction::AbstractFloat' : how many points are considered as possible starting points as a fraction of total points available
 - 'rect_increase::AbstractFloat' : describes the procentual rectangle volume increase/decrease during hyperrectangle creation. Low values can increase the precision if enough points are available but can cause systematically wrong results if not enough points are available.
 - 'use_all_rects::Bool' : All rectangles are used for the integration process no matter how big their overlap is. If enabled the rectangles are weighted by their overlap.
-- 'stop_ifenoughpoints::Bool' : if the hyper-rectangles created already contain enough points than no further rectangles are created. Increases the performance for the integration of easy target densities. Might decrease the reliability of the error estimation.
-- 'useMultiThreading' : activate experimental multithreading support. need use_all_rects enabled and stop_ifenoughpoints disabled.
+- 'useMultiThreading' : activate multithreading support.
 end
 
 """
-mutable struct HMIntegrationSettings
-    whitening_method::Symbol
+mutable struct HMISettings
+    whitening_function::Function
     max_startingIDs::Integer
     max_startingIDs_fraction::AbstractFloat
     rect_increase::AbstractFloat
-    stop_ifenoughpoints::Bool
-    skip_centerIDsinsideHyperRects::Bool
     useMultiThreading::Bool
     warning_minstartingids::Integer
     userectweights::Bool
-    nvolumerand::Integer
 end
-HMIntegrationFastSettings() =      return HMIntegrationSettings(:StatisticalWhitening, 100,   0.1, 0.1, true, true, true, 16, true, 1)
-HMIntegrationStandardSettings() =  return HMIntegrationSettings(:StatisticalWhitening, 1000,  0.5, 0.1, false, false, true, 16, true, 1)
-HMIntegrationPrecisionSettings() = return HMIntegrationSettings(:StatisticalWhitening, 10000, 2.5, 0.1, false, false, true, 16, true, 3)
+HMIFastSettings() =      return HMISettings(cholesky_whitening, 100,   0.1, 0.1, true, 16, true)
+HMIStandardSettings() =  return HMISettings(cholesky_whitening, 1000,  0.5, 0.1, true, 16, true)
+HMIPrecisionSettings() = return HMISettings(cholesky_whitening, 10000, 2.5, 0.1, true, 16, true)
 
 """
     WhiteningResult{T<:AbstractFloat}
@@ -90,8 +112,9 @@ struct WhiteningResult{T<:AbstractFloat}
     whiteningmatrix::Matrix{T}
     meanvalue::Vector{T}
 end
+WhiteningResult(T::DataType) = WhiteningResult(zero(T), zero(T), Matrix{T}(0, 0), Vector{T}(0))
 Base.show(io::IO, wres::WhiteningResult) = print(io, "Whitening Result: Determinant: $(wres.determinant), Target Prob. Factor: $(wres.targetprobfactor)")
-
+isinitialized(x::WhiteningResult) = !(iszero(x.determinant) && iszero(x.targetprobfactor) && isempty(x.whiteningmatrix) && isempty(x.meanvalue))
 
 """
     SearchResult{T<:AbstractFloat, I<:Integer}
@@ -181,6 +204,30 @@ Base.show(io::IO, ires::IntermediateResult) =
     print(io, "Rectangle Integration Result: $(ires.integral) +- $(ires.error), average Points: $(ires.points), average Volume: $(ires.volume)")
 
 
+
+mutable struct HMIEstimate{T<:AbstractFloat}
+    estimate::T
+    uncertainty::T
+    weights::Vector{T}
+end
+HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), Vector{T}(0))
+Base.show(io::IO, ires::HMIEstimate) = print(io, "$(ires.estimate)\t+-\t$(ires.uncertainty)")
+
+mutable struct HMIResult{T<:AbstractFloat}
+    integral::HMIEstimate{T}
+    integral_analyticweights::HMIEstimate{T}
+    integral_linearfit::HMIEstimate{T}
+    integral_weightedfit::HMIEstimate{T}
+    points::T
+    volume::T
+    integrals::Vector{IntermediateResult}
+end
+HMIResult(T::DataType) = HMIResult(HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), zero(T), zero(T), Vector{IntermediateResult}(0))
+Base.show(io::IO, ires::HMIResult) = print(io, "\n\tStandard integration result:\t$(ires.integral)
+\tAnaytic weighted result:\t$(ires.integral_analyticweights)
+\tLinear fit result:\t\t$(ires.integral_linearfit)
+\tWeighted fit result:\t\t$(ires.integral_weightedfit)")
+
 """
     HMIData{T<:AbstractFloat, I<:Integer}
 
@@ -199,51 +246,40 @@ the starting ids, and the average number of points and volume of the created hyp
 - 'integrals::Vector{T}' : The integral estimates of the different hyper-rectangles
 """
 mutable struct HMIData{T<:AbstractFloat, I<:Integer}
-    dataset::DataSet{T, I}
-    dataset2::Nullable{DataSet{T, I}}
-    whiteningresult::Nullable{WhiteningResult{T}}
-    datatree::Nullable{SearchTree}
-    startingIDs::Vector{I}
-    tolerance::T
-    volumelist::Vector{IntegrationVolume{T, I}}
-    integral::T
-    error::T
-    rectweights::Vector{T}
-    points::T
-    volume::T
-    integrals::Vector{IntermediateResult}
-    datasetchange::Bool
+    dataset1::DataSet{T, I}
+    dataset2::DataSet{T, I}
+    whiteningresult::WhiteningResult{T}
+    volumelist1::Vector{IntegrationVolume{T, I}}
+    volumelist2::Vector{IntegrationVolume{T, I}}
+    result::HMIResult{T}
 end
-function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
-    return HMIData(
-        dataset,
-        Nullable{DataSet{T, I}}(),
-        Nullable{WhiteningResult{T}}(),
-        Nullable{SearchTree}(),
-        Vector{I}(0),
-        T(0.0),
+
+function HMIData(
+    dataset1::DataSet{T, I},
+    dataset2::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
+
+    HMIData(
+        dataset1,
+        dataset2,
+        WhiteningResult(T),
         Vector{IntegrationVolume{T, I}}(0),
-        T(0.0), T(0.0),
-        Vector{T}(0),
-        T(0.0), T(0.0),
-        Vector{IntermediateResult}(0),
-        true
+        Vector{IntegrationVolume{T, I}}(0),
+        HMIResult(T)
     )
 end
 
-function HMIData(dataset1::DataSet{T, I}, dataset2::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}    return HMIData(
-        dataset1,
-        Nullable{DataSet{T, I}}(dataset2),
-        Nullable{WhiteningResult{T}}(),
-        Nullable{SearchTree}(),
-        Vector{I}(0),
-        T(0.0),
-        Vector{IntegrationVolume{T, I}}(0),
-        T(0.0), T(0.0),
-        Vector{T}(0),
-        T(0.0), T(0.0),
-        Vector{IntermediateResult}(0),
-        true
-    )
+function HMIData(
+    data::Tuple{DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}}, MCMCSampleIDVector, MCMCBasicStats})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
+
+    HMIData(data...)
 end
-Base.show(io::IO, ires::HMIData) = print(io, "Integration Result: $(ires.integral) +- $(ires.error), Rectangles: $(length(ires.integrals)), average Points: $(ires.points), average Volume: $(ires.volume)")
+
+function HMIData(
+    samples::DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}},
+    sampleIDs::MCMCSampleIDVector,
+    mcmcstats::MCMCBasicStats)::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
+
+    HMIData(split_samples(samples, sampleIDs, mcmcstats)...)
+end
+
+Base.show(io::IO, ires::HMIData) = print(io, "Data Set 1: $(length(ires.volumelist1)) Volumes, Data Set 2: $(length(ires.volumelist2))\nIntegration Result: $(ires.result)")

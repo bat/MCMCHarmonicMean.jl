@@ -3,18 +3,17 @@
 
 
 """
-    IntegrationVolume(dataset::DataSet{T, I}, datatree::SearchTree, spvol::HyperRectVolume{T}, searchpts::Bool = true)::IntegrationVolume{T, I}
+    IntegrationVolume(dataset::DataSet{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)::IntegrationVolume{T, I}
 
 creates an integration region by calculating the point cloud an the volume of the spatial volume.
 """
 function IntegrationVolume(
     dataset::DataSet{T, I},
-    datatree::SearchTree,
     spvol::HyperRectVolume{T},
     searchpts::Bool = true
 )::IntegrationVolume{T, I} where {T<:AbstractFloat, I<:Integer}
 
-    cloud = PointCloud(dataset, datatree, spvol, searchpts)
+    cloud = PointCloud(dataset, spvol, searchpts)
     vol = prod(spvol.hi - spvol.lo)
 
     return IntegrationVolume(cloud, spvol, vol)
@@ -22,14 +21,13 @@ end
 
 
 """
-    IntegrationVolume!(intvol::IntegrationVolume{T, I}, dataset::DataSet{T, I}, datatree::SearchTree, spvol::HyperRectVolume{T}, searchpts::Bool = true)
+    IntegrationVolume!(intvol::IntegrationVolume{T, I}, dataset::DataSet{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)
 
 updates an integration volume with new boundaries. Recalculates the pointcloud and volume.
 """
 function IntegrationVolume!(
     intvol::IntegrationVolume{T, I},
     dataset::DataSet{T, I},
-    datatree::SearchTree,
     spvol::HyperRectVolume{T},
     searchpts::Bool = true
 ) where {T<:AbstractFloat, I<:Integer}
@@ -40,7 +38,7 @@ function IntegrationVolume!(
         copy!(intvol.spatialvolume, spvol)
     end
 
-    PointCloud!(intvol.pointcloud, dataset, datatree, spvol, searchpts)
+    PointCloud!(intvol.pointcloud, dataset, spvol, searchpts)
 
     intvol.volume = prod(spvol.hi - spvol.lo)
 end
@@ -72,11 +70,10 @@ end
 
 function update!(
     volume::IntegrationVolume{T, I},
-    dataset::DataSet{T, I},
-    datatree::DataTree{T, I}
+    dataset::DataSet{T, I}
     ) where {T<:AbstractFloat, I<:Integer}
 
-    res = search(dataset, datatree, volume.spatialvolume, true)
+    res = search(dataset, volume.spatialvolume, true)
 
     _update!(volume, res, false, true)
 
@@ -113,7 +110,6 @@ end
 function resize_integrationvol(
     original::IntegrationVolume{T, I},
     dataset::DataSet{T, I},
-    datatree::DataTree{T, I},
     changed_dim::I,
     newrect::HyperRectVolume{T},
     searchpts::Bool = false
@@ -127,7 +123,6 @@ function resize_integrationvol!(
     result::IntegrationVolume{T, I},
     original::IntegrationVolume{T, I},
     dataset::DataSet{T, I},
-    datatree::DataTree{T, I},
     changed_dim::I,
     newrect::HyperRectVolume{T},
     searchpts::Bool,
@@ -167,14 +162,14 @@ function resize_integrationvol!(
     end
 
     if increase
-        res = search(dataset, datatree, searchVol, searchpts)
+        res = search(dataset, searchVol, searchpts)
 
         _update!(result, res, true, searchpts)
     else
-        res = search(dataset, datatree, searchVol, searchpts)
+        res = search(dataset, searchVol, searchpts)
         result.pointcloud.points = original.pointcloud.points - res.points
         if searchpts
-            newids = search(dataset, datatree, newrect, searchpts).pointIDs
+            newids = search(dataset, newrect, searchpts).pointIDs
             resize!(result.pointcloud.pointIDs, result.pointcloud.points)
             copy!(result.pointcloud.pointIDs, newids)
         end

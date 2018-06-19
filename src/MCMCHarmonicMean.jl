@@ -18,11 +18,16 @@ set_log_level!(MCMCHarmonicMean, LOG_INFO)
 
 using Base.Threads
 using MultiThreadingTools
-
-include("./util.jl")
+using StatsBase
+using ElasticArrays
+using StatsFuns
+using DataFrames
+using GLM
 
 include("./DataTypes.jl")
 include("./DataTree.jl")
+
+include("./util.jl")
 
 include("./PointCloud.jl")
 include("./IntegrationVolume.jl")
@@ -33,6 +38,8 @@ include("./Hyperrectangle.jl")
 include("./WhiteningTransformation.jl")
 include("./HarmonicMeanIntegration.jl")
 
+include("./uncertainty.jl")
+
 
 export hm_integrate
 export hm_swapdata, hm_reset_tolerance, hm_reset_hyperrectangles
@@ -42,15 +49,17 @@ export WhiteningResult
 export SearchTree, DataTree
 export IntermediateResult
 
-export HMIntegrationPrecisionSettings
-export HMIntegrationFastSettings
-export HMIntegrationStandardSettings
-export HMIntegrationMultiThreadingSettings
-export HMIntegrationSettings
+export HMIPrecisionSettings
+export HMIFastSettings
+export HMIStandardSettings
+export HMIMultiThreadingSettings
+export HMISettings
 
 export data_whitening
+export isinitialized
 
 export HMIData
+export HMIResult
 export PointCloud
 export IntegrationVolume
 

@@ -1,20 +1,6 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
-function data_whitening{T<:AbstractFloat, I<:Integer}(method::Symbol, dataset::DataSet{T, I})::WhiteningResult{T}
-    local whiteningresult::WhiteningResult
-    if method == :CholeskyWhitening
-        whiteningresult = cholesky_whitening(dataset)
-    elseif method == :StatisticalWhitening
-        whiteningresult = statistical_whitening(dataset)
-    elseif method == :NoWhitening
-        whiteningresult = no_whitening(dataset)
-    else
-        @log_msg LOG_ERROR "Unknown whitening method. Use :CholeskyWhitening, :StatisticalWhitening or :NoWhitening"
-    end
-    return whiteningresult
-end
-
 function no_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
     datamean = Vector{T}(0)
 
@@ -76,6 +62,8 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
     maxP::T = select(dataset.logprob, dataset.N)
     suggTargetProb::T = exp(maxP - select(dataset.logprob, floor(Int64, dataset.N * 0.2)))
 
+    dataset.iswhitened = true
+    
     @log_msg LOG_DEBUG "Determinant:\t" * string(determinant)
     @log_msg LOG_DEBUG "Suggested Target Probability Factor:\t" * string(suggTargetProb)
 

@@ -48,15 +48,14 @@ end
 end
 
 """
-    find_hypercube_centers(dataset::DataSet{T, I}, datatree::DataTree{T, I}, whiteningresult::WhiteningResult, settings::HMIntegrationSettings)::Vector{I}
+    find_hypercube_centers(dataset::DataSet{T, I}, whiteningresult::WhiteningResult, settings::HMISettings)::Vector{I}
 
 finds possible starting points for the hyperrectangle creation
 """
 function find_hypercube_centers(
     dataset::DataSet{T, I},
-    datatree::DataTree{T, I},
     whiteningresult::WhiteningResult{T},
-    settings::HMIntegrationSettings
+    settings::HMISettings
 )::Vector{I} where {T<:AbstractFloat, I<:Integer}
 
     weights = [T(-Inf) for i=1:dataset.N]
@@ -71,7 +70,7 @@ function find_hypercube_centers(
 
     ignorePoint = falses(dataset.N)
 
-    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, datatree, round(I, sqrt(dataset.N * 0.01)))
+    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, round(I, sqrt(dataset.N * 0.01)))
     @log_msg LOG_DEBUG "Test length of starting cubes: $testlength"
 
     @showprogress for n::I in sortLogProb[1:NMax]
@@ -82,7 +81,7 @@ function find_hypercube_centers(
         weights[n] = dataset.logprob[n]
 
         cubevol = HyperCubeVolume(dataset.data[:, n], testlength)
-        cube = IntegrationVolume(dataset, datatree, cubevol, true)
+        cube = IntegrationVolume(dataset, cubevol, true)
 
         ignorePoint[cube.pointcloud.pointIDs] = true
     end
@@ -116,28 +115,26 @@ function find_hypercube_centers(
     elseif NMax < settings.warning_minstartingids && stop < settings.warning_minstartingids
         @log_msg LOG_WARNING "Returned minimum number of starting points: $(settings.warning_minstartingids)"
         returnids = round.(I, [i for i=0:(settings.warning_minstartingids-1)] * dataset.N * 0.01 .+ 1.0)
-        return sortLogProb[returnids]
+        return dataset.startingIDs = sortLogProb[returnids]
     end
 
     @log_msg LOG_DEBUG "Possible Hypersphere Centers: $NMax out of $(dataset.N) points"
 
-    return sortIdx[1:NMax]
+    dataset.startingIDs = sortIdx[1:NMax]
 end
 
 function find_density_test_cube_edgelength(
     mode::Vector{T},
     dataset::DataSet{T, I},
-    datatree::DataTree{T, I},
     points::I = 100
 )::T where {T<:AbstractFloat, I<:Integer}
 
-    return find_density_test_cube(mode, dataset, datatree, points)[1]
+    return find_density_test_cube(mode, dataset, points)[1]
 end
 
 function find_density_test_cube(
     mode::Vector{T},
     dataset::DataSet{T, I},
-    datatree::DataTree{T, I},
     points::I
 )::Tuple{T, IntegrationVolume{T, I}} where {T<:AbstractFloat, I<:Integer}
 
@@ -149,7 +146,7 @@ function find_density_test_cube(
     last_change = 0
 
     rect = HyperCubeVolume(mode, l)
-    intvol = IntegrationVolume(dataset, datatree, rect, false)
+    intvol = IntegrationVolume(dataset, rect, false)
     pt = intvol.pointcloud.points
 
     iterations = 0
@@ -167,7 +164,7 @@ function find_density_test_cube(
         end
 
         HyperCubeVolume!(rect, mode, l)
-        IntegrationVolume!(intvol, dataset, datatree, rect, false)
+        IntegrationVolume!(intvol, dataset, rect, false)
         pt = intvol.pointcloud.points
     end
 

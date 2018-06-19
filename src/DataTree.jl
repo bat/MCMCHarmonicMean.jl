@@ -5,43 +5,55 @@ mutable struct DataTree{
     T<:AbstractFloat,
     I<:Integer
 } <: SearchTree
-    Cuts::I
-    Leafsize::I
+    cuts::I
+    leafsize::I
 
-    DimensionList::Vector{I}
-    RecursionDepth::I
-    CutList::Vector{T}
+    dimensionlist::Vector{I}
+    recursiondepth::I
+    cutlist::Vector{T}
 end
+DataTree(T::DataType, I::DataType) = DataTree{T, I}(zero(I), zero(I), Vector{I}(0), zero(I), Vector{I}(0))
+isinitialized(x::DataTree) = !(iszero(x.cuts) && iszero(x.leafsize) && isempty(x.dimensionlist) && iszero(x.recursiondepth) && isempty(x.cutlist))
 
-function create_search_tree(dataset::DataSet{T, I}, MinCuts::I = 8, MaxLeafsize::I = 200)::DataTree{T, I} where {T<:AbstractFloat, I<:Integer}
-    suggCuts = (dataset.N / MaxLeafsize) ^ (1 / dataset.P)
-    Cuts = ceil(I, max(MinCuts, suggCuts))
 
-    recDepth = ceil(I, log(dataset.N / MaxLeafsize) / log(Cuts))
+function create_search_tree(dataset::DataSet{T, I}, progressbar::Progress; mincuts::I = 8, maxleafsize::I = 200)::DataTree{T, I} where {T<:AbstractFloat, I<:Integer}
+    sugg_cuts = (dataset.N / maxleafsize) ^ (1 / dataset.P)
+    cuts = ceil(I, max(mincuts, sugg_cuts))
+
+    recdepth = ceil(I, log(dataset.N / maxleafsize) / log(cuts))
 
     #define dimension list
-    DimensionList = if Cuts > MinCuts
+    dimensionlist = if cuts > mincuts
         [i for i = 1:dataset.P]
     else
-        [i for i = 1:recDepth]
+        [i for i = 1:recdepth]
     end
 
-    Leafsize = ceil(I, dataset.N / Cuts^recDepth)
-    @log_msg LOG_DEBUG "Cuts $Cuts\tLeafsize $Leafsize\tRec. Depth $recDepth"
-    CutList = Vector{T}(0)
+    leafsize = ceil(I, dataset.N / cuts^recdepth)
+    @log_msg LOG_DEBUG "cuts $cuts\tleafsize $leafsize\tRec. Depth $recdepth"
+    cutlist = Vector{T}(0)
 
-    if recDepth > 0
-        createleafs(dataset, DimensionList, CutList, Cuts, Leafsize, 1)
+    if recdepth > 0
+        createleafs(dataset, progressbar, dimensionlist, cutlist, cuts, leafsize, 1)
     end
 
-    return DataTree(Cuts, Leafsize, DimensionList, length(DimensionList), CutList)
+    dataset.partitioningtree = DataTree(cuts, leafsize, dimensionlist, length(dimensionlist), cutlist)
 end
 
-function createleafs{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, DimensionList::Vector{I}, CutList::Vector{T}, Cuts::I, Leafsize::I, StartID::I = 0)
-    remainingRec::I = length(DimensionList)
+function createleafs(
+    dataset::DataSet{T, I},
+    progressbar::Progress,
+    dimensionlist::Vector{I},
+    cutlist::Vector{T},
+    cuts::I,
+    leafsize::I,
+    StartID::I = 0
+    ) where {T<:AbstractFloat, I<:Integer}
 
-    thisLeaf::I = Leafsize * Cuts^(remainingRec - 1)
-    bigLeaf::I = Leafsize * Cuts^remainingRec
+    remainingRec::I = length(dimensionlist)
+
+    thisLeaf::I = leafsize * cuts^(remainingRec - 1)
+    bigLeaf::I = leafsize * cuts^remainingRec
 
     startInt::I = StartID
     stopInt::I = StartID + bigLeaf - 1
@@ -49,45 +61,56 @@ function createleafs{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, Dimen
         stopInt = dataset.N
     end
 
-    sortID = sortperm(dataset.data[DimensionList[1], startInt:stopInt])
+    sortID = sortperm(dataset.data[dimensionlist[1], startInt:stopInt])
 
     dataset.data[:, startInt:stopInt] = dataset.data[:, sortID+startInt-1]
     dataset.logprob[startInt:stopInt] = dataset.logprob[sortID+startInt-1]
     dataset.weights[startInt:stopInt] = dataset.weights[sortID+startInt-1]
 
-    if remainingRec >= 1
-        start::I = 0
-        stop::I = StartID - 1
+    @assert remainingRec >= 1
+    start::I = 0
+    stop::I = StartID - 1
 
-        for i = 1:Cuts
-            if stop == dataset.N
-                continue
-            end
+    for i = 1:cuts
+        if stop == dataset.N
+            continue
+        end
 
-            start = stop + 1
-            stop += thisLeaf
-            if stop > dataset.N
-                stop = dataset.N
-            end
+        start = stop + 1
+        stop += thisLeaf
+        if stop > dataset.N
+            stop = dataset.N
+        end
 
-            push!(CutList, dataset.data[DimensionList[1], start])
+        push!(cutlist, dataset.data[dimensionlist[1], start])
 
-            if remainingRec > 1
-                createleafs(dataset, DimensionList[2:end], CutList, Cuts, Leafsize, start)
-            end
+        if remainingRec > 1
+            createleafs(dataset, progressbar, dimensionlist[2:end], cutlist, cuts, leafsize, start)
+        else
+            next!(progressbar)
         end
     end
 end
 
-function search{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::DataTree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)::SearchResult
+function search{T<:AbstractFloat, I<:Integer}(
+    dataset::DataSet{T, I},
+    searchvol::HyperRectVolume{T},
+    searchpoints::Bool = false
+    )::SearchResult
+
     res = SearchResult(T, I)
     #searchpoints = false
-    search!(res, dataset, datatree, searchvol, searchpoints)
+    search!(res, dataset, searchvol, searchpoints)
 
     return res
 end
 
-function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, dataset::DataSet{T, I}, datatree::DataTree{T, I}, searchvol::HyperRectVolume{T}, searchpoints::Bool = false)
+function search!{T<:AbstractFloat, I<:Integer}(
+    result::SearchResult{T, I},
+    dataset::DataSet{T, I},
+    searchvol::HyperRectVolume{T},
+    searchpoints::Bool = false)
+
     result.points = 0
     resize!(result.pointIDs, 0)
     result.maxLogProb = -Inf
@@ -99,8 +122,8 @@ function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, datas
     currentDimension::I = 0
     treePos = Vector{I}(0)
 
-    maxRecursion::I = datatree.RecursionDepth
-    maxI::I = length(datatree.CutList)
+    maxRecursion::I = dataset.partitioningtree.recursiondepth
+    maxI::I = length(dataset.partitioningtree.cutlist)
 
     i::I = 1
     if maxI == 0
@@ -141,21 +164,21 @@ function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, datas
         else
             treePos[currentRecursion] += 1
         end
-        while treePos[currentRecursion] > datatree.Cuts
+        while treePos[currentRecursion] > dataset.partitioningtree.cuts
             deleteat!(treePos, currentRecursion)
             currentRecursion -= 1
             treePos[currentRecursion] += 1
         end
-        currentDimension = datatree.DimensionList[currentRecursion]
+        currentDimension = dataset.partitioningtree.dimensionlist[currentRecursion]
 
 
         diff::I = 1
         for r::I = 1:(maxRecursion - currentRecursion)
-            diff += datatree.Cuts^r
+            diff += dataset.partitioningtree.cuts^r
         end
-        low::T = datatree.CutList[i]
-        high::T = i + diff > maxI ? datatree.CutList[end] : datatree.CutList[i+diff]
-        if treePos[currentDimension] == datatree.Cuts
+        low::T = dataset.partitioningtree.cutlist[i]
+        high::T = i + diff > maxI ? dataset.partitioningtree.cutlist[end] : dataset.partitioningtree.cutlist[i+diff]
+        if treePos[currentDimension] == dataset.partitioningtree.cuts
             high = Inf
         end
 
@@ -171,24 +194,27 @@ function search!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, datas
 
         #if on deepest recursion check for points
         if currentRecursion == maxRecursion
-            startID, stopID = getDataPositions(dataset, datatree, treePos)
+            startID, stopID = getDataPositions(dataset, treePos)
 
-            searchInterval!(result, dataset, datatree, searchvol, startID, stopID, searchpoints)
+            searchInterval!(result, dataset, searchvol, startID, stopID, searchpoints)
         end
         i += 1
     end
 
 end
 
-@inline function getDataPositions{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, datatree::DataTree{T, I}, TreePos::Vector{I})
-    maxRecursion = datatree.RecursionDepth
+@inline function getDataPositions{T<:AbstractFloat, I<:Integer}(
+    dataset::DataSet{T, I},
+    TreePos::Vector{I})
+
+    maxRecursion = dataset.partitioningtree.recursiondepth
     startID = 1
     recCntr = maxRecursion
     for t in TreePos
         recCntr -= 1
-        startID += datatree.Leafsize * datatree.Cuts^recCntr * (t-1)
+        startID += dataset.partitioningtree.leafsize * dataset.partitioningtree.cuts^recCntr * (t-1)
     end
-    stopID = startID + datatree.Leafsize - 1
+    stopID = startID + dataset.partitioningtree.leafsize - 1
     if stopID > dataset.N
         stopID = dataset.N
     end
@@ -197,8 +223,15 @@ end
 end
 
 
-function searchInterval!{T<:AbstractFloat, I<:Integer}(result::SearchResult{T, I}, dataset::DataSet{T, I}, datatree::DataTree{T, I}, searchvol::HyperRectVolume{T}, start::I, stop::I, searchpoints::Bool)
-    dimsort = datatree.DimensionList[datatree.RecursionDepth]
+function searchInterval!{T<:AbstractFloat, I<:Integer}(
+    result::SearchResult{T, I},
+    dataset::DataSet{T, I},
+    searchvol::HyperRectVolume{T},
+    start::I,
+    stop::I,
+    searchpoints::Bool)
+
+    dimsort = dataset.partitioningtree.dimensionlist[dataset.partitioningtree.recursiondepth]
 
     for i = start:stop
         if dataset.data[dimsort, i] > searchvol.hi[dimsort]
