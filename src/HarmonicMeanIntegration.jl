@@ -137,7 +137,7 @@ function hm_hyperrectanglecreation(
     maxPoints::I = 0
     totalpoints::I = 0
 
-    if result.dataset1.isnew || result.datset2.isnew
+    if result.dataset1.isnew || result.dataset2.isnew
         @log_msg LOG_INFO "Create Hyperrectangles using $(nthreads()) thread(s) for Data Set 1: $(result.dataset1.isnew)\t Data Set 2: $(result.dataset2.isnew)"
 
         thread_volumes1 = Vector{IntegrationVolume{T, I}}(result.dataset1.isnew ? length(result.dataset1.startingIDs) : 0)
@@ -295,6 +295,7 @@ function hm_integratehyperrectangles(
         end
 =#
 
+    #Standard Integral Result Combination
     rectweights = zeros(T, nRes)
     if settings.userectweights
         pweights1 = create_pointweights(result.dataset2, result.volumelist1)
@@ -325,43 +326,50 @@ function hm_integratehyperrectangles(
 
     integral, point, volume = tmean(_results, _points, _volumes, weights = rectweights)
     error = sqrt(var(_results) / rectnorm)
+    result.result.integral = HMIEstimate(integral, error, rectweights)
 
-    pointvar = sqrt(var(_points))
-
-    @log_msg LOG_INFO "Integration Result:\t $integral +- $(error))\nRectangles created: $(nRes)\tavg. points used: $(round(Int64, point)) +- $(round(Int64, pointvar))\t avg. volume: $volume"
-
+    #Integral Combination using analytic weights
     _errors = [integrationresults[i].integral for i in eachindex(integrationresults)]
     wi = 1.0 ./ _errors
 
     integral_unc = mean(_results, AnalyticWeights(wi))
     error_unc = sqrt(var(_results, AnalyticWeights(wi), corrected=true))
+    result.result.integral_analyticweights = HMIEstimate(integral_unc, error_unc, wi)
 
-    @log_msg LOG_INFO "Integration Result with analytic weights: $integral_unc\t+/-\t$error_unc"
-
+    #Integral Combination using a linear fit
     r = [result.volumelist1[i].pointcloud.points / result.dataset2.N for i in eachindex(result.volumelist1)]
     append!(r, [result.volumelist2[i].pointcloud.points / result.dataset1.N for i in eachindex(result.volumelist2)])
     intsub = _results .* r
+    χ_sq = (intsub .- (r .* integral)).^2
+    probablywrongintegralids = sortperm(χ_sq, rev=true)[1:round(Int64, nRes * 0.2)]
+
+    id = length(probablywrongintegralids)
+    for i in probablywrongintegralids
+        deleteat!(intsub, id)
+        deleteat!(r, id)
+        id -= 1
+    end
     dataframe = DataFrame(intsub = intsub, r = r)
 
 
     fit = glm(@formula(intsub ~ r), dataframe, Normal(), IdentityLink(), wts = ones(length(r)))
     res_fit = fit.model.pp.beta0[1] + fit.model.pp.beta0[2]
     err_fit = stderror(fit.model)[1] + stderror(fit.model)[2]
-    @log_msg LOG_INFO "Integration Result using linear fit: $res_fit \t+-\t $err_fit"
+    result.result.integral_linearfit = HMIEstimate(res_fit, err_fit, ones(length(nRes)))
 
 
     wts_fit = wi ./ sum(wi) .* length(wi)
+    id = length(probablywrongintegralids)
+    for i in probablywrongintegralids
+        deleteat!(wts_fit, id)
+        id -= 1
+    end
     fit = glm(@formula(intsub ~ r), dataframe, Normal(), IdentityLink(), wts = wts_fit)
     res_fit_w = fit.model.pp.beta0[1] + fit.model.pp.beta0[2]
     err_fit_w = stderror(fit.model)[1] + stderror(fit.model)[2]
-    @log_msg LOG_INFO "Integration Result using weighted linear fit: $res_fit_w \t+-\t $err_fit_w"
-
-
-    #@log_msg LOG_INFO "Integration Result using weighted mean: $integral \t+-\t $error"
-    result.result.integral = HMIEstimate(integral, error, rectweights)
-    result.result.integral_analyticweights = HMIEstimate(integral_unc, error_unc, wi)
-    result.result.integral_linearfit = HMIEstimate(res_fit, err_fit, ones(length(nRes)))
     result.result.integral_weightedfit = HMIEstimate(res_fit_w, err_fit_w, wts_fit)
+
+
     result.result.points = point
     result.result.volume = volume
     result.result.integrals = integrationresults

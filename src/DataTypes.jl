@@ -211,7 +211,7 @@ mutable struct HMIEstimate{T<:AbstractFloat}
     weights::Vector{T}
 end
 HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), Vector{T}(0))
-Base.show(io::IO, ires::HMIEstimate) = print(io, "$(ires.estimate)\t+-\t$(ires.uncertainty)")
+Base.show(io::IO, ires::HMIEstimate) = print(io, "$(round(ires.estimate, 5))\t+-\t$(round(ires.uncertainty, 5))")
 
 mutable struct HMIResult{T<:AbstractFloat}
     integral::HMIEstimate{T}
