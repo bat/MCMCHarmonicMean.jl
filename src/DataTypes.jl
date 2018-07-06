@@ -17,8 +17,10 @@ mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     data::Array{T, 2}
     logprob::Array{T, 1}
     weights::Array{T, 1}
+    ids::Array{I, 1}    #used to divide the dataset into sub-sets
     N::I
     P::I
+    nsubsets::I    #number of sub-sets
     iswhitened::Bool
     isnew::Bool
     partitioningtree::SearchTree
@@ -58,7 +60,15 @@ function DataSet(
     )::DataSet{T, Int64} where {T<:AbstractFloat}
 
     P, N = size(data)
-    DataSet(data, logprob, weights, N, P, false, true, DataTree(T, Int64), Array{Int64, 1}(0), T(0))
+
+    nsubsets = 20
+
+    ids = zeros(Int64, N)
+    for i = 1:N
+        ids[i] = floor(Int64, rand() * nsubsets) + 1
+    end
+
+    DataSet(data, logprob, weights, ids, N, P, nsubsets, false, true, DataTree(T, Int64), Array{Int64, 1}(0), T(0))
 end
 
 Base.show(io::IO, data::DataSet) = print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
@@ -211,7 +221,7 @@ mutable struct HMIEstimate{T<:AbstractFloat}
     weights::Vector{T}
 end
 HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), Vector{T}(0))
-Base.show(io::IO, ires::HMIEstimate) = print(io, "$(round(ires.estimate, 5))\t+-\t$(round(ires.uncertainty, 5))")
+Base.show(io::IO, ires::HMIEstimate) = print(io, "$(signif(ires.estimate, 6))\t+-\t$(signif(ires.uncertainty, 6))")
 
 mutable struct HMIResult{T<:AbstractFloat}
     integral::HMIEstimate{T}
@@ -221,8 +231,11 @@ mutable struct HMIResult{T<:AbstractFloat}
     points::T
     volume::T
     integrals::Vector{IntermediateResult}
+    Σ1::Array{T, 2}
+    Σ2::Array{T, 2}
 end
-HMIResult(T::DataType) = HMIResult(HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), zero(T), zero(T), Vector{IntermediateResult}(0))
+HMIResult(T::DataType) = HMIResult(HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), zero(T), zero(T), Vector{IntermediateResult}(0),
+    Array{T, 2}(0,0), Array{T, 2}(0,0))
 Base.show(io::IO, ires::HMIResult) = print(io, "\n\tStandard integration result:\t$(ires.integral)
 \tAnaytic weighted result:\t$(ires.integral_analyticweights)
 \tLinear fit result:\t\t$(ires.integral_linearfit)

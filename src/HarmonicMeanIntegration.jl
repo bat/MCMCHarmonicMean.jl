@@ -208,7 +208,7 @@ function hm_hyperrectanglecreation(
             totalpoints += result.volumelist2[i].pointcloud.points
         end
 
-        result.dataset1.isnew = false
+        result.dataset2.isnew = false
     end
 
 
@@ -245,12 +245,17 @@ function hm_integratehyperrectangles(
 
     integrationresults = Array{IntermediateResult, 1}(nRes)
 
+    integrationresults1_cov = Array{T, 2}(result.dataset2.nsubsets, length(result.volumelist1))
+    integrationresults2_cov = Array{T, 2}(result.dataset1.nsubsets, length(result.volumelist2))
+
+
     @log_msg LOG_INFO "Integrating $nRes Hyperrectangles"
 
     progressbar = Progress(nRes)
 
     @mt_threads for i in eachindex(result.volumelist1)
         integrationresults[i] = integrate_hyperrectangle(result.dataset2, result.volumelist1[i], result.whiteningresult.determinant)
+        integrationresults1_cov[:, i] = integrate_hyperrectangle_cov(result.dataset2, result.volumelist1[i], result.whiteningresult.determinant)
         lock(BAT.Logging._global_lock) do
             next!(progressbar)
         end
@@ -258,42 +263,15 @@ function hm_integratehyperrectangles(
 
     @mt_threads for i in eachindex(result.volumelist2)
         integrationresults[i + offset] = integrate_hyperrectangle(result.dataset1, result.volumelist2[i], result.whiteningresult.determinant)
+        integrationresults2_cov[:, i] = integrate_hyperrectangle_cov(result.dataset1, result.volumelist2[i], result.whiteningresult.determinant)
         lock(BAT.Logging._global_lock) do
             next!(progressbar)
         end
     end
     finish!(progressbar)
 
-
-
-        #remove integrals with no result
-#=        j = nRes
-        for i = 1:nRes
-            try
-                if !isassigned(IntResults, j) || isnan(IntResults[j].integral)
-                    deleteat!(IntResults, j)
-                    if i > cntr
-                        deleteat!(result.volumelist2, j - cntr)
-                    else
-                        deleteat!(result.volumelist, j)
-                    end
-                end
-            catch e
-                @log_msg LOG_ERROR string(e)
-
-                if length(IntResults) >= j
-                    if i > cntr
-                        deleteat!(result.volumelist2, j - cntr)
-                    else
-                        deleteat!(result.volumelist, j)
-                    end
-                    deleteat!(IntResults, j)
-                end
-            finally
-                j -= 1
-            end
-        end
-=#
+    result.result.Σ1 = cov(integrationresults1_cov)
+    result.result.Σ2 = cov(integrationresults2_cov)
 
     #Standard Integral Result Combination
     rectweights = zeros(T, nRes)
@@ -714,12 +692,10 @@ function integrate_hyperrectangle(
     determinant::T)::IntermediateResult{T} where {T<:AbstractFloat, I<:Integer}
 
     s::T = 0.0
-    count::T = 0.0
     for i in integrationvol.pointcloud.pointIDs
         #for numerical stability
-        prob = (dataset.logprob[i] - integrationvol.pointcloud.maxLogProb)
+        prob = dataset.logprob[i] - integrationvol.pointcloud.maxLogProb
         s += 1.0 / exp(prob) * dataset.weights[i]
-        count += dataset.weights[i]
     end
 
     totalWeight::T = sum(dataset.weights)
@@ -731,4 +707,29 @@ function integrate_hyperrectangle(
     @log_msg LOG_DEBUG "Integral Estimate: $integral ± $error"
 
     return IntermediateResult(integral, error, T(integrationvol.pointcloud.points), integrationvol.volume)
+end
+
+function integrate_hyperrectangle_cov(
+    dataset::DataSet{T, I},
+    integrationvol::IntegrationVolume{T, I},
+    determinant::T)::Array{T, 1} where {T<:AbstractFloat, I<:Integer}
+
+    integral_estimates = Array{T, 1}(dataset.nsubsets)
+    totalWeights = zeros(dataset.nsubsets)
+
+    for i in eachindex(dataset.weights)
+        totalWeights[dataset.ids[i]] += dataset.weights[i]
+    end
+
+    s = zeros(dataset.nsubsets)
+    for id in integrationvol.pointcloud.pointIDs
+        prob = dataset.logprob[id] - integrationvol.pointcloud.maxLogProb
+        s[dataset.ids[id]] += 1.0 / exp(prob) * dataset.weights[id]
+    end
+
+    for n = 1:dataset.nsubsets
+        integral_estimates[n] = totalWeights[n] * integrationvol.volume / s[n] / determinant / exp(-integrationvol.pointcloud.maxLogProb)
+    end
+
+    return integral_estimates
 end
