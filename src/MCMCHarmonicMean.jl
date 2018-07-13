@@ -42,7 +42,8 @@ include("./uncertainty.jl")
 
 
 export hm_integrate
-export hm_swapdata, hm_reset_tolerance, hm_reset_hyperrectangles
+export split_samples
+export split_dataset
 
 export DataSet
 export WhiteningResult

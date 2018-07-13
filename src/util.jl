@@ -1,47 +1,73 @@
 
+function _trim(x::Array{T})::Tuple{Array{Int64},Array{Int64}} where {T<:AbstractFloat}
+    ids = sortperm(x)
+    distances = [x[ids[i+1]] - x[ids[i]] for i=1:length(x)-1]
 
-
-#trims dataset before performing mean and variance calculation to increase stability
-function tmean(
-    x::Vector{T},
-    params...;
-    tr::T = T(0.1),
-    weights::Vector{T} = Vector{T}(0),
-    calculateVar::Bool = false
-)::Tuple where {T<:AbstractFloat}
-
-    if tr < 0.0 || tr > 0.5
-        @log_msg LOG_ERROR "tr is not allowed to be smaller than 0.0 or larger than 0.5"
-    end
-    for i in eachindex(params)
-        if length(params[i]) != length(x)
-            @log_msg LOG_ERROR "$i. entry of params has a different length than x"
+    density = zeros(length(x))
+    for i in eachindex(density)
+        if i == 1
+            density[i] = 0.25 / distances[1]
+        elseif i == length(density)
+            density[i] = 0.25 / distances[end]
+        else
+            density[i] = 1.0 / (distances[i-1] + distances[i])
         end
     end
-    if length(weights) != 0 && length(weights) != length(x)
-        @log_msg LOG_ERROR "length of weights doesn't match length of x"
-    end
+    #normalize density
+    density /= sum(density)
 
-    perm = sortperm(x)
+    #remove tails -> trim to 1σ
+    cutoff = (1 - 0.6827) * 0.5
+    #cutoff = (1 - 0.9545) * 0.5
+    #cutoff = (1 - 0.8) * 0.5
 
-    l = length(x)
-    lo = floor(Int64, tr * l + 1)
-    hi = ceil(Int64, (1-tr) * l)
+    prob = 0.0
 
-    norm::Bool = length(weights) > 0
+    start = 1
+    stop = length(x)
 
-    additionalreturns = Vector{T}(length(params))
-    variances = Vector{T}((calculateVar ? length(params) + 1 : 0))
-    for i in eachindex(params)
-        additionalreturns[i] = norm ? mean(params[i][perm][lo:hi], FrequencyWeights(weights[perm][lo:hi])) : mean(params[i][perm][lo:hi])
-    end
-    if calculateVar
-        variances[1] = norm ? var(x[perm][lo:hi], FrequencyWeights(weights[perm][lo:hi]), corrected = true) : var(x[perm][lo:hi])
-        for i = 2:length(variances)
-            variances[i] = norm ? var(params[i-1][perm][lo:hi], FrequencyWeights(params[i-1][perm][lo:hi]), corrected = true) : var(params[i-1][perm][lo:hi])
+    for i in eachindex(x)
+        prob += density[i]
+        if prob >= cutoff
+            start = max(1, i - 1)
+            break
         end
     end
-    return ((norm ? T(mean(x[perm][lo:hi], FrequencyWeights(weights[perm][lo:hi]))) : mean(T, x[perm][lo:hi])), additionalreturns..., variances...)
+
+    j = length(x)
+    prob = 0.0
+    for i in eachindex(x)
+        prob += density[j]
+        if prob >= cutoff
+            stop = min(length(x), j + 1)
+            break
+        end
+        j -= 1
+    end
+
+    sort!(ids[[1:start..., stop:length(x)...]]), sort!(ids[[start+1:stop-1...]])
+end
+
+
+function trim(x::Array)
+    deleteat!(x, _trim(x)[1])
+    x
+end
+
+function trim(res::IntermediateResults{T}) where {T<:AbstractFloat}
+
+    deleteids, remainingids = _trim(res.integrals)
+    @log_msg LOG_DEBUG "Trimming integration results: $(length(deleteids)) entries out of $(length(res.integrals)) deleted"
+try
+    deleteat!(res.integrals, deleteids)
+catch
+    println(deleteids)
+    println("\n$remainingids")
+end
+    deleteat!(res.weights_overlap, deleteids)
+    deleteat!(res.weights_cov, deleteids)
+    res.Z = res.Z[:, remainingids]
+    nothing
 end
 
 
@@ -89,6 +115,16 @@ function split_samples(
 
     ds1 = DataSet(samples.params[:, 1:n], samples.log_value[1:n], samples.weight[1:n])
     ds2 = DataSet(samples.params[:, n+1:N], samples.log_value[n+1:N], samples.weight[n+1:N])
+
+    return ds1, ds2
+end
+
+function split_dataset(dataset::DataSet{T, I})::Tuple{DataSet{T, I}, DataSet{T, I}} where {T<:Real, I<:Integer}
+    N = dataset.N
+    n = floor(Int64, N / 2)
+
+    ds1 = DataSet(dataset.data[:, 1:n], dataset.logprob[1:n], dataset.weights[1:n], dataset.nsubsets)
+    ds2 = DataSet(dataset.data[:, n+1:N], dataset.logprob[n+1:N], dataset.weights[n+1:N], dataset.nsubsets)
 
     return ds1, ds2
 end

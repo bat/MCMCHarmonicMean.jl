@@ -56,7 +56,7 @@ function find_hypercube_centers(
     dataset::DataSet{T, I},
     whiteningresult::WhiteningResult{T},
     settings::HMISettings
-)::Vector{I} where {T<:AbstractFloat, I<:Integer}
+)::Bool where {T<:AbstractFloat, I<:Integer}
 
     weights = [T(-Inf) for i=1:dataset.N]
 
@@ -70,7 +70,7 @@ function find_hypercube_centers(
 
     ignorePoint = falses(dataset.N)
 
-    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, round(I, sqrt(dataset.N * 0.01)))
+    testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, round(I, sqrt(dataset.N)))
     @log_msg LOG_DEBUG "Test length of starting cubes: $testlength"
 
     @showprogress for n::I in sortLogProb[1:NMax]
@@ -115,12 +115,15 @@ function find_hypercube_centers(
     elseif NMax < settings.warning_minstartingids && stop < settings.warning_minstartingids
         @log_msg LOG_WARNING "Returned minimum number of starting points: $(settings.warning_minstartingids)"
         returnids = round.(I, [i for i=0:(settings.warning_minstartingids-1)] * dataset.N * 0.01 .+ 1.0)
-        return dataset.startingIDs = sortLogProb[returnids]
+        dataset.startingIDs = sortLogProb[returnids]
+        return false
     end
 
     @log_msg LOG_DEBUG "Possible Hypersphere Centers: $NMax out of $(dataset.N) points"
 
     dataset.startingIDs = sortIdx[1:NMax]
+
+    return true
 end
 
 function find_density_test_cube_edgelength(

@@ -29,43 +29,61 @@ mutable struct DataSet{T<:AbstractFloat, I<:Integer}
 end
 
 function DataSet(
-    data::Tuple{DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}}, MCMCSampleIDVector, MCMCBasicStats}
+    data::Tuple{DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}}, MCMCSampleIDVector, MCMCBasicStats},
+    nsubsets::Int64 = 0
     )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
 
-    DataSet(data...)
+    DataSet(data..., nsubsets)
 end
 
 function DataSet(
     samples::DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}},
     sampleIDs::MCMCSampleIDVector,
-    mcmcstats::MCMCBasicStats
+    mcmcstats::MCMCBasicStats,
+    nsubsets::Int64 = 0
     )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
 
-    DataSet(convert(Array{T, 2}, samples.params), samples.log_value, samples.weight)
+    DataSet(convert(Array{T, 2}, samples.params), samples.log_value, samples.weight, nsubsets)
 end
 
 function DataSet(
     data:: Array{T, 2},
     logprob::Array{T, 1},
-    weights::Array{I, 1}
+    weights::Array{I, 1},
+    nsubsets::Int64 = 0
     )::DataSet{T, Int64} where {T<:AbstractFloat, I<:Integer}
 
-    DataSet(data, logprob, convert(Array{T, 1}, weights))
+    DataSet(data, logprob, convert(Array{T, 1}, weights), nsubsets)
 end
 
 function DataSet(
     data:: Array{T, 2},
     logprob::Array{T, 1},
-    weights::Array{T, 1}
+    weights::Array{T, 1},
+    nsubsets::Int64 = 0
     )::DataSet{T, Int64} where {T<:AbstractFloat}
 
     P, N = size(data)
 
-    nsubsets = 20
+    if nsubsets == 0
+        nsubsets = 1000
+    end
+
+    sumweights = zeros(nsubsets)
 
     ids = zeros(Int64, N)
+    cnt = 1
+    prevcnt = nsubsets
+    nextcnt = 2
+
     for i = 1:N
-        ids[i] = floor(Int64, rand() * nsubsets) + 1
+        ids[i] = cnt
+        sumweights[cnt] += weights[i]
+        if sumweights[cnt] >= sumweights[prevcnt] && sumweights[cnt] >= sumweights[nextcnt]
+            prevcnt = cnt
+            cnt = nextcnt
+            nextcnt = cnt == nsubsets ? 1 : cnt + 1
+        end
     end
 
     DataSet(data, logprob, weights, ids, N, P, nsubsets, false, true, DataTree(T, Int64), Array{Int64, 1}(0), T(0))
@@ -90,7 +108,6 @@ HMIPrecisionSettings()
 - 'use_all_rects::Bool' : All rectangles are used for the integration process no matter how big their overlap is. If enabled the rectangles are weighted by their overlap.
 - 'useMultiThreading' : activate multithreading support.
 end
-
 """
 mutable struct HMISettings
     whitening_function::Function
@@ -99,11 +116,10 @@ mutable struct HMISettings
     rect_increase::AbstractFloat
     useMultiThreading::Bool
     warning_minstartingids::Integer
-    userectweights::Bool
 end
-HMIFastSettings() =      return HMISettings(cholesky_whitening, 100,   0.1, 0.1, true, 16, true)
-HMIStandardSettings() =  return HMISettings(cholesky_whitening, 1000,  0.5, 0.1, true, 16, true)
-HMIPrecisionSettings() = return HMISettings(cholesky_whitening, 10000, 2.5, 0.1, true, 16, true)
+HMIFastSettings() =      return HMISettings(cholesky_whitening, 100,   0.1, 0.1, true, 16)
+HMIStandardSettings() =  return HMISettings(cholesky_whitening, 1000,  0.5, 0.1, true, 16)
+HMIPrecisionSettings() = return HMISettings(cholesky_whitening, 10000, 2.5, 0.1, true, 16)
 
 """
     WhiteningResult{T<:AbstractFloat}
@@ -115,7 +131,6 @@ Stores the information obtained during the Whitening Process
 - 'whiteningmatrix::Matrix{T}' : The whitening matrix
 - 'meanvalue::Vector{T}' : the mean vector of the input data
 """
-
 struct WhiteningResult{T<:AbstractFloat}
     determinant::T
     targetprobfactor::T
@@ -138,7 +153,6 @@ Stores the results of the search tree's search function
 - 'maxWeightProb::T' : the weighted minimum log. probability found.
 - 'minWeightProb::T' : the weighted maximum log. probfactor found.
 """
-
 mutable struct SearchResult{T<:AbstractFloat, I<:Integer}
     pointIDs::Vector{I}
     points::I
@@ -170,7 +184,6 @@ Stores the information of the points of an e.g. HyperRectVolume
 - 'points::I' : The number of points inside the hyper-rectangle
 - 'pointIDs::Vector{I}' : the IDs of the points inside the hyper-rectangle, might be empty because it is optional and costs performance
 """
-
 mutable struct PointCloud{T<:AbstractFloat, I<:Integer}
     maxLogProb::T
     minLogProb::T
@@ -194,7 +207,6 @@ Base.show(io::IO, cloud::PointCloud) = print(io, "Point Cloud with $(cloud.point
 
 Hold the point cloud and the spatial volume for integration.
 """
-
 mutable struct IntegrationVolume{T<:AbstractFloat, I<:Integer}
     pointcloud::PointCloud{T, I}
     spatialvolume::HyperRectVolume{T}
@@ -204,42 +216,24 @@ Base.show(io::IO, vol::IntegrationVolume) = print(io, "Hyperrectangle: $(vol.poi
 
 
 
-struct IntermediateResult{T<:AbstractFloat}
-    integral::T
-    error::T
-    points::T
-    volume::T
+mutable struct IntermediateResults{T<:AbstractFloat}
+    integrals::Array{T, 1}
+    weights_overlap::Array{T, 1}
+    weights_cov::Array{T, 1}
+    Z::Array{T, 2}
+    Σ::Array{T, 2}
+    σ::T
 end
-Base.show(io::IO, ires::IntermediateResult) =
-    print(io, "Rectangle Integration Result: $(ires.integral) +- $(ires.error), average Points: $(ires.points), average Volume: $(ires.volume)")
-
-
+IntermediateResults(T::DataType, n::Int64) = IntermediateResults(zeros(T, n), zeros(T, n), zeros(T, n), Array{T, 2}(0,0), Array{T,2}(0,0), zero(T))
+Base.length(x::IntermediateResults) = length(x.integrals)
 
 mutable struct HMIEstimate{T<:AbstractFloat}
     estimate::T
     uncertainty::T
-    weights::Vector{T}
+    weights::Array{T, 1}
 end
-HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), Vector{T}(0))
+HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), Array{T, 1}(0))
 Base.show(io::IO, ires::HMIEstimate) = print(io, "$(signif(ires.estimate, 6))\t+-\t$(signif(ires.uncertainty, 6))")
-
-mutable struct HMIResult{T<:AbstractFloat}
-    integral::HMIEstimate{T}
-    integral_analyticweights::HMIEstimate{T}
-    integral_linearfit::HMIEstimate{T}
-    integral_weightedfit::HMIEstimate{T}
-    points::T
-    volume::T
-    integrals::Vector{IntermediateResult}
-    Σ1::Array{T, 2}
-    Σ2::Array{T, 2}
-end
-HMIResult(T::DataType) = HMIResult(HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), zero(T), zero(T), Vector{IntermediateResult}(0),
-    Array{T, 2}(0,0), Array{T, 2}(0,0))
-Base.show(io::IO, ires::HMIResult) = print(io, "\n\tStandard integration result:\t$(ires.integral)
-\tAnaytic weighted result:\t$(ires.integral_analyticweights)
-\tLinear fit result:\t\t$(ires.integral_linearfit)
-\tWeighted fit result:\t\t$(ires.integral_weightedfit)")
 
 """
     HMIData{T<:AbstractFloat, I<:Integer}
@@ -264,7 +258,10 @@ mutable struct HMIData{T<:AbstractFloat, I<:Integer}
     whiteningresult::WhiteningResult{T}
     volumelist1::Vector{IntegrationVolume{T, I}}
     volumelist2::Vector{IntegrationVolume{T, I}}
-    result::HMIResult{T}
+    integrals1::IntermediateResults{T}
+    integrals2::IntermediateResults{T}
+    integral_standard::HMIEstimate{T}
+    integral_covweighted::HMIEstimate{T}
 end
 
 function HMIData(
@@ -277,8 +274,15 @@ function HMIData(
         WhiteningResult(T),
         Vector{IntegrationVolume{T, I}}(0),
         Vector{IntegrationVolume{T, I}}(0),
-        HMIResult(T)
+        IntermediateResults(T, 0),
+        IntermediateResults(T, 0),
+        HMIEstimate(T),
+        HMIEstimate(T)
     )
+end
+
+function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
+    HMIData(split_dataset(dataset)...)
 end
 
 function HMIData(
@@ -295,4 +299,6 @@ function HMIData(
     HMIData(split_samples(samples, sampleIDs, mcmcstats)...)
 end
 
-Base.show(io::IO, ires::HMIData) = print(io, "Data Set 1: $(length(ires.volumelist1)) Volumes, Data Set 2: $(length(ires.volumelist2))\nIntegration Result: $(ires.result)")
+Base.show(io::IO, ires::HMIData) = print(io, "Data Set 1: $(length(ires.volumelist1)) Volumes, Data Set 2: $(length(ires.volumelist2))
+\tStandard integration result:\t $(ires.integral_standard)
+\tCov. weighted result:\t\t $(ires.integral_covweighted)")
