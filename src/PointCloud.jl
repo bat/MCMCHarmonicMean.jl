@@ -14,23 +14,20 @@ function PointCloud{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, hyperr
     return result
 end
 
-function PointCloud(T::DataType, I::DataType)::PointCloud
-    return PointCloud(T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), I(0), Vector{I}(0))
-end
 
 function PointCloud!{T<:AbstractFloat, I<:Integer}(cloud::PointCloud{T, I}, dataset::DataSet{T, I}, hyperrect::HyperRectVolume{T}, searchpts::Bool)
 
-    res = search(dataset, hyperrect, searchpts)
+    search!(cloud.searchres, dataset, hyperrect, searchpts)
 
-    cloud.points = res.points
+    cloud.points = cloud.searchres.points
 
     resize!(cloud.pointIDs, cloud.points)
-    copy!(cloud.pointIDs, res.pointIDs)
+    copy!(cloud.pointIDs, cloud.searchres.pointIDs)
 
-    cloud.maxWeightProb = res.maxWeightProb
-    cloud.minWeightProb = res.minWeightProb
-    cloud.maxLogProb = res.maxLogProb
-    cloud.minLogProb = res.minLogProb
+    cloud.maxWeightProb = cloud.searchres.maxWeightProb
+    cloud.minWeightProb = cloud.searchres.minWeightProb
+    cloud.maxLogProb = cloud.searchres.maxLogProb
+    cloud.minLogProb = cloud.searchres.minLogProb
 
     cloud.probfactor = exp(cloud.maxLogProb - cloud.minLogProb)
     cloud.probweightfactor = exp(cloud.maxWeightProb - cloud.minWeightProb)

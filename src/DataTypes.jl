@@ -66,7 +66,7 @@ function DataSet(
     P, N = size(data)
 
     if nsubsets == 0
-        nsubsets = 1000
+        nsubsets = 10
     end
 
     sumweights = zeros(nsubsets)
@@ -193,7 +193,9 @@ mutable struct PointCloud{T<:AbstractFloat, I<:Integer}
     probweightfactor::T
     points::I
     pointIDs::Vector{I}
+    searchres::SearchResult{T, I}
 end
+PointCloud(T::DataType, I::DataType) = PointCloud(T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), I(0), Vector{I}(0), SearchResult(T, I))
 Base.show(io::IO, cloud::PointCloud) = print(io, "Point Cloud with $(cloud.points) points, probability factor: $(cloud.probfactor)")
 
 

@@ -58,72 +58,121 @@ function find_hypercube_centers(
     settings::HMISettings
 )::Bool where {T<:AbstractFloat, I<:Integer}
 
-    weights = [T(-Inf) for i=1:dataset.N]
 
+weights = [T(-Inf) for i=1:dataset.N]
+
+   sortLogProb = sortperm(dataset.logprob, rev = true)
+
+   NMax = round(I, sqrt(dataset.N) * settings.max_startingIDs_fraction)
+   if NMax < 2 * settings.warning_minstartingids
+       NMax = min(2 * settings.warning_minstartingids, dataset.N)
+   end
+   @log_msg LOG_DEBUG "Considered starting Points $NMax"
+
+   ignorePoint = falses(dataset.N)
+
+   testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, round(I, sqrt(dataset.N)))
+   @log_msg LOG_DEBUG "Test length of starting cubes: $testlength"
+
+   @showprogress for n::I in sortLogProb[1:NMax]
+       if ignorePoint[n]
+           continue
+       end
+
+       weights[n] = dataset.logprob[n]
+
+       cubevol = HyperCubeVolume(dataset.data[:, n], testlength)
+       cube = IntegrationVolume(dataset, cubevol, true)
+
+       ignorePoint[cube.pointcloud.pointIDs] = true
+   end
+
+   sortIdx = sortperm(weights, rev = true)
+
+   stop::T = 1.0
+   for i::I = 1:dataset.N
+       if weights[sortIdx[i]] == -Inf
+           stop = i
+           break
+       end
+   end
+   NMax::I = stop - 1
+
+   max_startingIDs::I = min(settings.max_startingIDs, round(I, dataset.N * settings.max_startingIDs_fraction))
+   if stop > max_startingIDs
+       NMax = max_startingIDs
+   end
+   stop = dataset.logprob[sortIdx[1]] - log(whiteningresult.targetprobfactor)
+   for i = 1:NMax
+       if dataset.logprob[sortIdx[i]] < stop
+           NMax = i
+           break
+       end
+   end
+
+   #return at least settings.warning_minstartingids possible hyper-rect centers
+   if NMax < settings.warning_minstartingids && stop >= settings.warning_minstartingids
+       NMax = settings.warning_minstartingids
+   elseif NMax < settings.warning_minstartingids && stop < settings.warning_minstartingids
+       @log_msg LOG_WARNING "Returned minimum number of starting points: $(settings.warning_minstartingids)"
+       returnids = round.(I, [i for i=0:(settings.warning_minstartingids-1)] * dataset.N * 0.01 .+ 1.0)
+       dataset.startingIDs = sortLogProb[returnids]
+       return false
+   end
+
+   @log_msg LOG_DEBUG "Possible Hypersphere Centers: $NMax out of $(dataset.N) points"
+
+   dataset.startingIDs = sortIdx[1:NMax]
+
+return true
+
+#TODO FIND BUG
+#=
     sortLogProb = sortperm(dataset.logprob, rev = true)
 
-    NMax = round(I, sqrt(dataset.N) * settings.max_startingIDs_fraction)
-    if NMax < 2 * settings.warning_minstartingids
-        NMax = min(2 * settings.warning_minstartingids, dataset.N)
-    end
-    @log_msg LOG_DEBUG "Considered starting Points $NMax"
+    NMax = min(settings.max_startingIDs, round(I, sqrt(dataset.N * settings.max_startingIDs_fraction)))
+    NConsidered = round(I, sqrt(dataset.N) * settings.max_startingIDs_fraction)
+    @log_msg LOG_DEBUG "Considered starting samples $NConsidered"
 
-    ignorePoint = falses(dataset.N)
+    discardedsamples = falses(dataset.N)
 
     testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, round(I, sqrt(dataset.N)))
     @log_msg LOG_DEBUG "Test length of starting cubes: $testlength"
 
-    @showprogress for n::I in sortLogProb[1:NMax]
-        if ignorePoint[n]
+    maxprob = dataset.logprob[sortLogProb[1]]
+    startingsamples = Array{I, 1}(NMax)
+    cntr = 0
+    @showprogress for n::I in sortLogProb[1:NConsidered]
+        if discardedsamples[n]
             continue
         end
+        if cntr == NMax || dataset.logprob[n] < maxprob - log(whiteningresult.targetprobfactor)
+            break
+        end
 
-        weights[n] = dataset.logprob[n]
+        cntr += 1
+        startingsamples[cntr] = n
 
         cubevol = HyperCubeVolume(dataset.data[:, n], testlength)
         cube = IntegrationVolume(dataset, cubevol, true)
 
-        ignorePoint[cube.pointcloud.pointIDs] = true
+        discardedsamples[cube.pointcloud.pointIDs] = true
     end
+    resize!(startingsamples, cntr)
 
-    sortIdx = sortperm(weights, rev = true)
-
-    stop::T = 1.0
-    for i::I = 1:dataset.N
-        if weights[sortIdx[i]] == -Inf
-            stop = i
-            break
-        end
-    end
-    NMax::I = stop - 1
-
-    max_startingIDs::I = min(settings.max_startingIDs, round(I, dataset.N * settings.max_startingIDs_fraction))
-    if stop > max_startingIDs
-        NMax = max_startingIDs
-    end
-    stop = dataset.logprob[sortIdx[1]] - log(whiteningresult.targetprobfactor)
-    for i = 1:NMax
-        if dataset.logprob[sortIdx[i]] < stop
-            NMax = i
-            break
-        end
-    end
-
-    #return at least settings.warning_minstartingids possible hyper-rect centers
-    if NMax < settings.warning_minstartingids && stop >= settings.warning_minstartingids
-        NMax = settings.warning_minstartingids
-    elseif NMax < settings.warning_minstartingids && stop < settings.warning_minstartingids
+    success = true
+    if cntr < settings.warning_minstartingids
+        startingsamples = sortperm(dataset.logprob)[1:settings.warning_minstartingids]
+        success = false
         @log_msg LOG_WARNING "Returned minimum number of starting points: $(settings.warning_minstartingids)"
-        returnids = round.(I, [i for i=0:(settings.warning_minstartingids-1)] * dataset.N * 0.01 .+ 1.0)
-        dataset.startingIDs = sortLogProb[returnids]
-        return false
     end
 
-    @log_msg LOG_DEBUG "Possible Hypersphere Centers: $NMax out of $(dataset.N) points"
 
-    dataset.startingIDs = sortIdx[1:NMax]
+    @log_msg LOG_DEBUG "Selected Starting Samples: $cntr out of $(dataset.N) points"
+    dataset.startingIDs = startingsamples
 
-    return true
+    success
+    =#
 end
 
 function find_density_test_cube_edgelength(

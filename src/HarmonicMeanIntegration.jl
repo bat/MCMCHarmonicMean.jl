@@ -55,7 +55,7 @@ function hm_integrate(
     #time: 19ms, 18 MB
     hm_createpartitioningtree(result)
 
-    #time: 29ms, 9MB
+
     notsinglemode = hm_findstartingsamples(result, settings)
 
     #time: 223ms, 104MB

@@ -3,6 +3,10 @@ function _trim(x::Array{T})::Tuple{Array{Int64},Array{Int64}} where {T<:Abstract
     ids = sortperm(x)
     distances = [x[ids[i+1]] - x[ids[i]] for i=1:length(x)-1]
 
+    if length(x) < 3
+        return Array{Int64, 1}(0), collect(1:length(x))
+    end
+
     density = zeros(length(x))
     for i in eachindex(density)
         if i == 1
@@ -58,12 +62,8 @@ function trim(res::IntermediateResults{T}) where {T<:AbstractFloat}
 
     deleteids, remainingids = _trim(res.integrals)
     @log_msg LOG_DEBUG "Trimming integration results: $(length(deleteids)) entries out of $(length(res.integrals)) deleted"
-try
+
     deleteat!(res.integrals, deleteids)
-catch
-    println(deleteids)
-    println("\n$remainingids")
-end
     deleteat!(res.weights_overlap, deleteids)
     deleteat!(res.weights_cov, deleteids)
     res.Z = res.Z[:, remainingids]
