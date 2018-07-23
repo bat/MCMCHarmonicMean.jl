@@ -48,8 +48,12 @@ function statistical_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T,
     return transform_data(dataset, wres, datamean)
 end
 
-function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W::Matrix{T}, datamean::Vector{T})::WhiteningResult{T}
+function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W::Matrix{T}, datamean::Vector{T}, substractmean::Bool = false)::WhiteningResult{T}
     local determinant::T
+
+    if substractmean
+        dataset.data .-= datamean
+    end
 
     if W == eye(T, dataset.P)
         determinant = 1.0
@@ -63,7 +67,7 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
     suggTargetProb::T = exp(maxP - select(dataset.logprob, floor(Int64, dataset.N * 0.2)))
 
     dataset.iswhitened = true
-    
+
     @log_msg LOG_DEBUG "Determinant:\t" * string(determinant)
     @log_msg LOG_DEBUG "Suggested Target Probability Factor:\t" * string(suggTargetProb)
 

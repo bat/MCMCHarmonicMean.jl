@@ -116,11 +116,11 @@ function hm_whiteningtransformation(
 
     if !result.dataset1.iswhitened
         @log_msg LOG_INFO "Apply Whitening Transformation to Data Set 1"
-        transform_data(result.dataset1, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue)
+        transform_data(result.dataset1, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue, false)
     end
     if !result.dataset2.iswhitened
         @log_msg LOG_INFO "Apply Whitening Transformation to Data Set 2"
-        transform_data(result.dataset2, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue)
+        transform_data(result.dataset2, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue, true)
     end
 end
 
@@ -280,7 +280,25 @@ function hm_integratehyperrectangles(
     result.integral_standard = HMIEstimate(i_std, sqrt(var(allintegrals)) / sum(rectweights), rectweights)
 
     σtot = sqrt(result.integrals1.σ + result.integrals2.σ)
-    covweights = [result.integrals1.weights_cov..., result.integrals2.weights_cov...]
+    #covweights = [result.integrals1.weights_cov..., result.integrals2.weights_cov...]
+    covweights1 = zeros(length(result.integrals1.integrals))
+    covweights2 = zeros(length(result.integrals2.integrals))
+    for i in eachindex(result.integrals1.integrals)
+        σinv = inv(result.integrals1.Σ)
+        for k in eachindex(result.integrals1.integrals)
+            covweights1[i] += σinv[i, k]
+        end
+        covweights1[i] /= sum(σinv)
+    end
+    for i in eachindex(result.integrals2.integrals)
+        σinv = inv(result.integrals2.Σ)
+        for k in eachindex(result.integrals2.integrals)
+            covweights2[i] += σinv[i, k]
+        end
+        covweights2[i] /= sum(σinv)
+    end
+    covweights = [covweights1..., covweights2...]
+
     i_cov = mean(allintegrals, AnalyticWeights(covweights))
     result.integral_covweighted = HMIEstimate(i_cov, σtot, covweights)
 end
@@ -303,8 +321,8 @@ function hm_integratehyperrectangles_dataset(
     integralestimates.weights_overlap::Array{T, 1} = zeros(T, length(volumes))
 
     @mt_threads for i in eachindex(volumes)
-        integralestimates.Z[:, i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
-        integralestimates.integrals[i] = 1.0 / mean(view(integralestimates.Z, :, i))
+        integralestimates.Z[:, i], integralestimates.integrals[i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
+        #integralestimates.integrals[i] = 1.0 / mean(view(integralestimates.Z, :, i))
 
         trw = sum(dataset.weights[volumes[i].pointcloud.pointIDs])
         for id in eachindex(volumes[i].pointcloud.pointIDs)
@@ -323,7 +341,7 @@ function hm_integratehyperrectangles_dataset(
     integralestimates.Σ = cov(integralestimates.Z)
     integralestimates.weights_cov = 1 ./ diag(integralestimates.Σ)
 
-    integral_coeff = 1 ./ length(integralestimates) / dataset.nsubsets .* integralestimates.integrals.^2
+    integral_coeff = ones(T, length(integralestimates)) ./ length(integralestimates) ./ dataset.nsubsets #.* integralestimates.integrals.^2
     integralestimates.σ = transpose(integral_coeff) * integralestimates.Σ * integral_coeff
 
     @log_msg LOG_DEBUG "Covariance σ: $(integralestimates.σ)"
@@ -466,7 +484,7 @@ function create_hyperrectangle(
     step = 0.7
     direction = 0
     PtsIncrease = 0.0
-#@time begin
+
     it = 0
     while vol.pointcloud.probfactor < targetprobfactor / tol || vol.pointcloud.probfactor > targetprobfactor
         tol += 0.01 * it
@@ -495,7 +513,6 @@ function create_hyperrectangle(
             break
         end
     end
-#end
 
     @log_msg LOG_TRACE "Starting Hypercube Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)"
 
@@ -683,29 +700,30 @@ end
 function integrate_hyperrectangle_cov(
     dataset::DataSet{T, I},
     integrationvol::IntegrationVolume{T, I},
-    determinant::T)::Array{T, 1} where {T<:AbstractFloat, I<:Integer}
+    determinant::T)::Tuple{Array{T, 1}, T} where {T<:AbstractFloat, I<:Integer}
 
     norm_const = Array{T, 1}(dataset.nsubsets)
-    totalWeights = zeros(dataset.nsubsets)
+    totalWeights = zeros(T, dataset.nsubsets)
 
     for i in eachindex(dataset.weights)
         totalWeights[dataset.ids[i]] += dataset.weights[i]
     end
 
-    s = zeros(dataset.nsubsets)
-    nsamples = zeros(dataset.nsubsets)
+    s = zeros(T, dataset.nsubsets)
+    s_sum = T(0)
+    nsamples = zeros(T, dataset.nsubsets)
     for id in integrationvol.pointcloud.pointIDs
         prob = dataset.logprob[id] - integrationvol.pointcloud.maxLogProb
-        s[dataset.ids[id]] += 1.0 / exp(prob) * dataset.weights[id]
-        nsamples[dataset.ids[id]] += 1.0
+        s[dataset.ids[id]] += T(1) / exp(prob) * dataset.weights[id]
+        s_sum += T(1) / exp(prob) * dataset.weights[id]
+        nsamples[dataset.ids[id]] += T(1)
     end
 
     for n = 1:dataset.nsubsets
-        norm_const[n] = totalWeights[n] * integrationvol.volume /  determinant / exp(-integrationvol.pointcloud.maxLogProb)
+        norm_const[n] = totalWeights[n] * integrationvol.volume / determinant / exp(-integrationvol.pointcloud.maxLogProb)
     end
 
+    integral::T = sum(dataset.weights) * integrationvol.volume / s_sum / determinant / exp(-integrationvol.pointcloud.maxLogProb)
 
-    #delivers Z / (V * N)
-    #integral estimate is the inverse V * N / Z
-    return s ./ norm_const
+    return norm_const ./ s, integral
 end

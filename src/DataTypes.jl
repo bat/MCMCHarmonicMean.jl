@@ -69,20 +69,22 @@ function DataSet(
         nsubsets = 10
     end
 
-    sumweights = zeros(nsubsets)
 
     ids = zeros(Int64, N)
     cnt = 1
-    prevcnt = nsubsets
-    nextcnt = 2
+    batch_weightsize = 10.0
+    batch_currentsize = 0.0
 
     for i = 1:N
         ids[i] = cnt
-        sumweights[cnt] += weights[i]
-        if sumweights[cnt] >= sumweights[prevcnt] && sumweights[cnt] >= sumweights[nextcnt]
-            prevcnt = cnt
-            cnt = nextcnt
-            nextcnt = cnt == nsubsets ? 1 : cnt + 1
+        batch_currentsize += weights[i]
+
+        if batch_currentsize >= batch_weightsize
+            cnt += 1
+            if cnt > nsubsets
+                cnt = 1
+            end
+            batch_currentsize = 0.0
         end
     end
 
