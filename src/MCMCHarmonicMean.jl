@@ -20,9 +20,9 @@ using Base.Threads
 using MultiThreadingTools
 using StatsBase
 using ElasticArrays
-using StatsFuns
-using DataFrames
-using GLM
+#using StatsFuns
+#using DataFrames
+#using GLM
 
 include("./DataTypes.jl")
 include("./DataTree.jl")

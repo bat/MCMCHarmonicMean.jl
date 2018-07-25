@@ -182,8 +182,8 @@ function hm_hyperrectanglecreation(
         @log_msg LOG_INFO "Create $nvols Hyperrectangles using $(_global_mt_setting ? nthreads() : 1) thread(s)"
         progressbar = Progress(nvols)
 
-        isempty(result.volumelist1) && hm_hyperrectanglecreation_dataset(result.dataset1, result.volumelist1, result.whiteningresult.targetprobfactor, progressbar, settings)
-        isempty(result.volumelist2) && hm_hyperrectanglecreation_dataset(result.dataset2, result.volumelist2, result.whiteningresult.targetprobfactor, progressbar, settings)
+        isempty(result.volumelist1) && hm_hyperrectanglecreation_dataset(result.dataset1, result.volumelist1, result.cubelist1, result.whiteningresult.targetprobfactor, progressbar, settings)
+        isempty(result.volumelist2) && hm_hyperrectanglecreation_dataset(result.dataset2, result.volumelist2, result.cubelist2, result.whiteningresult.targetprobfactor, progressbar, settings)
 
         finish!(progressbar)
     end
@@ -206,6 +206,7 @@ end
 function hm_hyperrectanglecreation_dataset(
     dataset::DataSet{T, I},
     volumes::Array{IntegrationVolume{T, I}, 1},
+    cubes::Array{HyperRectVolume{T}, 1},
     targetprobfactor::T,
     progressbar::Progress,
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer}
@@ -215,15 +216,17 @@ function hm_hyperrectanglecreation_dataset(
     totalpoints::I = 0
 
     thread_volumes = Vector{IntegrationVolume{T, I}}(length(dataset.startingIDs))
+    thread_cubes = Vector{HyperRectVolume{T}}(length(dataset.startingIDs))
 
     atomic_centerID = Atomic{I}(1)
-    @mt MCMCHarmonicMean.hyperrectangle_creationproccess!(dataset, targetprobfactor, settings, thread_volumes, atomic_centerID, progressbar)
+    @mt MCMCHarmonicMean.hyperrectangle_creationproccess!(dataset, targetprobfactor, settings, thread_volumes, thread_cubes, atomic_centerID, progressbar)
 
     for i in eachindex(thread_volumes)
         if isassigned(thread_volumes, i) == false
         elseif thread_volumes[i].pointcloud.probfactor == 1.0 || thread_volumes[i].pointcloud.points < dataset.P * 4
         else
             push!(volumes, thread_volumes[i])
+            push!(cubes, thread_cubes[i])
             maxPoints = max(maxPoints, thread_volumes[i].pointcloud.points)
             totalpoints += thread_volumes[i].pointcloud.points
         end
@@ -280,7 +283,8 @@ function hm_integratehyperrectangles(
     result.integral_standard = HMIEstimate(i_std, sqrt(var(allintegrals)) / sum(rectweights), rectweights)
 
     σtot = sqrt(result.integrals1.σ + result.integrals2.σ)
-    #covweights = [result.integrals1.weights_cov..., result.integrals2.weights_cov...]
+    covweights = [result.integrals1.weights_cov..., result.integrals2.weights_cov...]
+#=
     covweights1 = zeros(length(result.integrals1.integrals))
     covweights2 = zeros(length(result.integrals2.integrals))
     for i in eachindex(result.integrals1.integrals)
@@ -298,7 +302,7 @@ function hm_integratehyperrectangles(
         covweights2[i] /= sum(σinv)
     end
     covweights = [covweights1..., covweights2...]
-
+=#
     i_cov = mean(allintegrals, AnalyticWeights(covweights))
     result.integral_covweighted = HMIEstimate(i_cov, σtot, covweights)
 end
@@ -426,6 +430,7 @@ function hyperrectangle_creationproccess!(
     targetprobfactor::T,
     settings::HMISettings,
     integrationvolumes::Vector{IntegrationVolume{T, I}},
+    cubevolumes::Vector{HyperRectVolume{T}},
     atomic_centerID::Atomic{I},
     progressbar::Progress) where {T<:AbstractFloat, I<:Integer}
 
@@ -443,7 +448,7 @@ function hyperrectangle_creationproccess!(
         end
 
         #create hyper-rectangle
-        integrationvolumes[idc] = create_hyperrectangle(id, dataset, targetprobfactor, settings)
+        integrationvolumes[idc], cubevolumes[idc] = create_hyperrectangle(id, dataset, targetprobfactor, settings)
 
         @log_msg LOG_DEBUG "Hyperrectangle created. Points:\t$(integrationvolumes[idc].pointcloud.points)\tVolume:\t$(integrationvolumes[idc].volume)\tProb. Factor:\t$(integrationvolumes[idc].pointcloud.probfactor)"
     end
@@ -465,7 +470,7 @@ function create_hyperrectangle(
     id::I,
     dataset::DataSet{T, I},
     targetprobfactor::T,
-    settings::HMISettings)::IntegrationVolume{T, I} where {T<:AbstractFloat, I<:Integer}
+    settings::HMISettings)::Tuple{IntegrationVolume{T, I}, HyperRectVolume{T}} where {T<:AbstractFloat, I<:Integer}
 
     edgelength::T = 1.0
 
@@ -514,6 +519,7 @@ function create_hyperrectangle(
         end
     end
 
+    finalcube = deepcopy(cube)
     @log_msg LOG_TRACE "Starting Hypercube Points:\t$(vol.pointcloud.points)\tVolume:\t$(vol.volume)\tProb. Factor:\t$(vol.pointcloud.probfactor)"
 
 
@@ -686,7 +692,7 @@ function create_hyperrectangle(
     vol.pointcloud.probfactor = exp(vol.pointcloud.maxLogProb - vol.pointcloud.minLogProb)
     vol.pointcloud.probweightfactor = exp(vol.pointcloud.maxWeightProb - vol.pointcloud.minWeightProb)
 
-    return vol
+    return vol, finalcube
 end
 
 @inline function adjuststepsize!(Step, Increase::Bool)

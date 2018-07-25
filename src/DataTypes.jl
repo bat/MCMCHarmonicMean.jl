@@ -21,6 +21,7 @@ mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     N::I
     P::I
     nsubsets::I    #number of sub-sets
+    subsetsize::T
     iswhitened::Bool
     isnew::Bool
     partitioningtree::SearchTree
@@ -30,56 +31,65 @@ end
 
 function DataSet(
     data::Tuple{DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}}, MCMCSampleIDVector, MCMCBasicStats},
-    nsubsets::Int64 = 0
+    nsubsets::Int64 = 0,
+    subsetsize::T = zero(T)
     )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
 
-    DataSet(data..., nsubsets)
+    DataSet(data..., nsubsets, subsetsize)
 end
 
 function DataSet(
     samples::DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}},
     sampleIDs::MCMCSampleIDVector,
     mcmcstats::MCMCBasicStats,
-    nsubsets::Int64 = 0
+    nsubsets::Int64 = 0,
+    subsetsize::T = zero(T)
     )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
 
-    DataSet(convert(Array{T, 2}, samples.params), samples.log_value, samples.weight, nsubsets)
+    DataSet(convert(Array{T, 2}, samples.params), samples.log_value, samples.weight, nsubsets, subsetsize)
 end
 
 function DataSet(
     data:: Array{T, 2},
     logprob::Array{T, 1},
     weights::Array{I, 1},
-    nsubsets::Int64 = 0
+    nsubsets::Int64 = 0,
+    subsetsize::T = zero(T)
     )::DataSet{T, Int64} where {T<:AbstractFloat, I<:Integer}
 
-    DataSet(data, logprob, convert(Array{T, 1}, weights), nsubsets)
+    DataSet(data, logprob, convert(Array{T, 1}, weights), nsubsets, subsetsize)
 end
 
 function DataSet(
     data:: Array{T, 2},
     logprob::Array{T, 1},
     weights::Array{T, 1},
-    nsubsets::Int64 = 0
+    nsubsets::Int64 = 0,
+    subsetsize::T = zero(T)
     )::DataSet{T, Int64} where {T<:AbstractFloat}
 
     P, N = size(data)
 
-    if nsubsets == 0
+    if iszero(nsubsets)
         nsubsets = 10
     end
 
+    maxbatchsize = sum(weights) / 10 / nsubsets
+    if iszero(subsetsize)
+        subsetsize = 100.0
+    end
+    subsetsize = min(maxbatchsize, subsetsize)
 
     ids = zeros(Int64, N)
     cnt = 1
-    batch_weightsize = 10.0
+
     batch_currentsize = 0.0
 
     for i = 1:N
         ids[i] = cnt
         batch_currentsize += weights[i]
 
-        if batch_currentsize >= batch_weightsize
+        if batch_currentsize >= subsetsize
             cnt += 1
             if cnt > nsubsets
                 cnt = 1
@@ -88,7 +98,7 @@ function DataSet(
         end
     end
 
-    DataSet(data, logprob, weights, ids, N, P, nsubsets, false, true, DataTree(T, Int64), Array{Int64, 1}(0), T(0))
+    DataSet(data, logprob, weights, ids, N, P, nsubsets, subsetsize, false, true, DataTree(T, Int64), Array{Int64, 1}(0), T(0))
 end
 
 Base.show(io::IO, data::DataSet) = print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
@@ -262,6 +272,8 @@ mutable struct HMIData{T<:AbstractFloat, I<:Integer}
     whiteningresult::WhiteningResult{T}
     volumelist1::Vector{IntegrationVolume{T, I}}
     volumelist2::Vector{IntegrationVolume{T, I}}
+    cubelist1::Vector{HyperRectVolume{T}}
+    cubelist2::Vector{HyperRectVolume{T}}
     integrals1::IntermediateResults{T}
     integrals2::IntermediateResults{T}
     integral_standard::HMIEstimate{T}
@@ -278,6 +290,8 @@ function HMIData(
         WhiteningResult(T),
         Vector{IntegrationVolume{T, I}}(0),
         Vector{IntegrationVolume{T, I}}(0),
+        Vector{HyperRectVolume{T}}(0),
+        Vector{HyperRectVolume{T}}(0),
         IntermediateResults(T, 0),
         IntermediateResults(T, 0),
         HMIEstimate(T),
