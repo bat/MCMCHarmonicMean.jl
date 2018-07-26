@@ -272,8 +272,8 @@ function hm_integratehyperrectangles(
 
     progressbar = Progress(nRes)
 
-    result.integrals1 = hm_integratehyperrectangles_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
-    result.integrals2 = hm_integratehyperrectangles_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals1, result.rejectedrects1 = hm_integratehyperrectangles_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals2, result.rejectedrects2 = hm_integratehyperrectangles_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
 
     finish!(progressbar)
 
@@ -312,7 +312,7 @@ function hm_integratehyperrectangles_dataset(
     dataset::DataSet{T, I},
     determinant::T,
     progressbar::Progress,
-    settings::HMISettings)::IntermediateResults{T} where {T<:AbstractFloat, I<:Integer}
+    settings::HMISettings)::Tuple{IntermediateResults{T}, Vector{I}} where {T<:AbstractFloat, I<:Integer}
 
     if length(volumes) < 1
         @log_msg LOG_ERROR "No hyper-rectangles could be created. Try integration with more points or different settings."
@@ -338,7 +338,7 @@ function hm_integratehyperrectangles_dataset(
         end
     end
 
-    trim(integralestimates)
+    rejectedids = trim(integralestimates)
 
     @log_msg LOG_TRACE "Rectangle weights: $(integralestimates.weights_overlap))"
 
@@ -350,7 +350,7 @@ function hm_integratehyperrectangles_dataset(
 
     @log_msg LOG_DEBUG "Covariance σ: $(integralestimates.σ)"
 
-    return integralestimates
+    return integralestimates, rejectedids
 end
 
 

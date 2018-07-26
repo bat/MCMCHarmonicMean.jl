@@ -274,6 +274,8 @@ mutable struct HMIData{T<:AbstractFloat, I<:Integer}
     volumelist2::Vector{IntegrationVolume{T, I}}
     cubelist1::Vector{HyperRectVolume{T}}
     cubelist2::Vector{HyperRectVolume{T}}
+    rejectedrects1::Vector{I}
+    rejectedrects2::Vector{I}
     integrals1::IntermediateResults{T}
     integrals2::IntermediateResults{T}
     integral_standard::HMIEstimate{T}
@@ -292,6 +294,8 @@ function HMIData(
         Vector{IntegrationVolume{T, I}}(0),
         Vector{HyperRectVolume{T}}(0),
         Vector{HyperRectVolume{T}}(0),
+        Vector{I}(0),
+        Vector{I}(0),
         IntermediateResults(T, 0),
         IntermediateResults(T, 0),
         HMIEstimate(T),

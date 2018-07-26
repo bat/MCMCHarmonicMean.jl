@@ -66,6 +66,7 @@ function createleafs(
     dataset.data[:, startInt:stopInt] = dataset.data[:, sortID+startInt-1]
     dataset.logprob[startInt:stopInt] = dataset.logprob[sortID+startInt-1]
     dataset.weights[startInt:stopInt] = dataset.weights[sortID+startInt-1]
+    dataset.ids[startInt:stopInt] =     dataset.ids[sortID+startInt-1]
 
     @assert remainingRec >= 1
     start::I = 0

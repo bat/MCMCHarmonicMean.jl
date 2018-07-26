@@ -67,7 +67,8 @@ function trim(res::IntermediateResults{T}) where {T<:AbstractFloat}
     deleteat!(res.weights_overlap, deleteids)
     deleteat!(res.weights_cov, deleteids)
     res.Z = res.Z[:, remainingids]
-    nothing
+
+    deleteids
 end
 
 
