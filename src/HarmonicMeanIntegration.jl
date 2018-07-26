@@ -730,6 +730,14 @@ function integrate_hyperrectangle_cov(
     end
 
     integral::T = sum(dataset.weights) * integrationvol.volume / s_sum / determinant / exp(-integrationvol.pointcloud.maxLogProb)
+    integrals_batches = norm_const ./ s
 
-    return norm_const ./ s, integral
+    #replace INF entries with mean integral value
+    for i in eachindex(integrals_batches)
+        if isnan(integrals_batches[i]) || isinf(integrals_batches[i])
+            integrals_batches[i] = integral
+        end
+    end
+
+    return integrals_batches, integral
 end
