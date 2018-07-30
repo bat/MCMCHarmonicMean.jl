@@ -317,7 +317,7 @@ function hm_integratehyperrectangles_dataset(
 
     @log_msg LOG_TRACE "Rectangle weights: $(integralestimates.weights_overlap))"
 
-    integralestimates.Σ = cov(integralestimates.Y)
+    integralestimates.Σ = cov(integralestimates.Y) ./ dataset.nsubsets
 
     overlap = Array{T, 2}(M, M)
 
