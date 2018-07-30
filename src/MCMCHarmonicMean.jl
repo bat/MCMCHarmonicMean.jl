@@ -20,9 +20,7 @@ using Base.Threads
 using MultiThreadingTools
 using StatsBase
 using ElasticArrays
-#using StatsFuns
-#using DataFrames
-#using GLM
+using DataStructures
 
 include("./DataTypes.jl")
 include("./DataTree.jl")
@@ -41,7 +39,16 @@ include("./HarmonicMeanIntegration.jl")
 include("./uncertainty.jl")
 
 
+export hm_init
+export hm_whiteningtransformation
+export hm_createpartitioningtree
+export hm_findstartingsamples
+export hm_determinetolerance
+export hm_hyperrectanglecreation
+export hm_integratehyperrectangles
+
 export hm_integrate
+
 export split_samples
 export split_dataset
 

@@ -234,11 +234,12 @@ mutable struct IntermediateResults{T<:AbstractFloat}
     integrals::Array{T, 1}
     weights_overlap::Array{T, 1}
     weights_cov::Array{T, 1}
-    Z::Array{T, 2}
+    volumeID::Array{Int64, 1}
+    overlap::Array{T, 2}
+    Y::Array{T, 2}
     Σ::Array{T, 2}
-    σ::T
 end
-IntermediateResults(T::DataType, n::Int64) = IntermediateResults(zeros(T, n), zeros(T, n), zeros(T, n), Array{T, 2}(0,0), Array{T,2}(0,0), zero(T))
+IntermediateResults(T::DataType, n::Int64) = IntermediateResults(zeros(T, n), zeros(T, n), zeros(T, n), [Int64(i) for i=1:n], Array{T, 2}(0,0), Array{T, 2}(0,0), Array{T,2}(0,0))
 Base.length(x::IntermediateResults) = length(x.integrals)
 
 mutable struct HMIEstimate{T<:AbstractFloat}
@@ -247,6 +248,11 @@ mutable struct HMIEstimate{T<:AbstractFloat}
     weights::Array{T, 1}
 end
 HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), Array{T, 1}(0))
+function HMIEstimate(a::HMIEstimate{T}, b::HMIEstimate{T})::HMIEstimate{T} where {T<:AbstractFloat}
+    val = mean([a.estimate, b.estimate], AnalyticWeights([1 / a.uncertainty^2, 1 / b.uncertainty^2]))
+    unc = 1 / sqrt(1 / a.uncertainty^2 + 1 / b.uncertainty^2)
+    HMIEstimate(val, unc, [a.weights..., b.weights...])
+end
 Base.show(io::IO, ires::HMIEstimate) = print(io, "$(signif(ires.estimate, 6))\t+-\t$(signif(ires.uncertainty, 6))")
 
 """

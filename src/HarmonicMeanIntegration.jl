@@ -272,39 +272,13 @@ function hm_integratehyperrectangles(
 
     progressbar = Progress(nRes)
 
-    result.integrals1, result.rejectedrects1 = hm_integratehyperrectangles_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
-    result.integrals2, result.rejectedrects2 = hm_integratehyperrectangles_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals1, result.rejectedrects1, integral_standard1, integral_cov1 = hm_integratehyperrectangles_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals2, result.rejectedrects2, integral_standard2, integral_cov2 = hm_integratehyperrectangles_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
 
     finish!(progressbar)
 
-    rectweights = [result.integrals1.weights_overlap..., result.integrals2.weights_overlap...]
-    allintegrals = [result.integrals1.integrals..., result.integrals2.integrals...]
-    i_std = mean(allintegrals, ProbabilityWeights(rectweights))
-    result.integral_standard = HMIEstimate(i_std, sqrt(var(allintegrals)) / sum(rectweights), rectweights)
-
-    σtot = sqrt(result.integrals1.σ + result.integrals2.σ)
-    covweights = [result.integrals1.weights_cov..., result.integrals2.weights_cov...]
-#=
-    covweights1 = zeros(length(result.integrals1.integrals))
-    covweights2 = zeros(length(result.integrals2.integrals))
-    for i in eachindex(result.integrals1.integrals)
-        σinv = inv(result.integrals1.Σ)
-        for k in eachindex(result.integrals1.integrals)
-            covweights1[i] += σinv[i, k]
-        end
-        covweights1[i] /= sum(σinv)
-    end
-    for i in eachindex(result.integrals2.integrals)
-        σinv = inv(result.integrals2.Σ)
-        for k in eachindex(result.integrals2.integrals)
-            covweights2[i] += σinv[i, k]
-        end
-        covweights2[i] /= sum(σinv)
-    end
-    covweights = [covweights1..., covweights2...]
-=#
-    i_cov = mean(allintegrals, AnalyticWeights(covweights))
-    result.integral_covweighted = HMIEstimate(i_cov, σtot, covweights)
+    result.integral_standard = HMIEstimate(integral_standard1, integral_standard2)
+    result.integral_covweighted = HMIEstimate(integral_cov1, integral_cov2)
 end
 
 function hm_integratehyperrectangles_dataset(
@@ -312,21 +286,21 @@ function hm_integratehyperrectangles_dataset(
     dataset::DataSet{T, I},
     determinant::T,
     progressbar::Progress,
-    settings::HMISettings)::Tuple{IntermediateResults{T}, Vector{I}} where {T<:AbstractFloat, I<:Integer}
+    settings::HMISettings)::Tuple{IntermediateResults{T}, Vector{I}, HMIEstimate{T}, HMIEstimate{T}} where {T<:AbstractFloat, I<:Integer}
 
     if length(volumes) < 1
         @log_msg LOG_ERROR "No hyper-rectangles could be created. Try integration with more points or different settings."
     end
 
     integralestimates = IntermediateResults(T, length(volumes))
-    integralestimates.Z = Array{T, 2}(dataset.nsubsets, length(volumes))
+    integralestimates.Y = Array{T, 2}(dataset.nsubsets, length(volumes))
 
     pweights = create_pointweights(dataset, volumes)
     integralestimates.weights_overlap::Array{T, 1} = zeros(T, length(volumes))
 
     @mt_threads for i in eachindex(volumes)
-        integralestimates.Z[:, i], integralestimates.integrals[i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
-        #integralestimates.integrals[i] = 1.0 / mean(view(integralestimates.Z, :, i))
+        integralestimates.Y[:, i], integralestimates.integrals[i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
+        #integralestimates.integrals[i] = 1.0 / mean(view(integralestimates.Y, :, i))
 
         trw = sum(dataset.weights[volumes[i].pointcloud.pointIDs])
         for id in eachindex(volumes[i].pointcloud.pointIDs)
@@ -339,18 +313,61 @@ function hm_integratehyperrectangles_dataset(
     end
 
     rejectedids = trim(integralestimates)
+    M = length(integralestimates)
 
     @log_msg LOG_TRACE "Rectangle weights: $(integralestimates.weights_overlap))"
 
-    integralestimates.Σ = cov(integralestimates.Z)
+    integralestimates.Σ = cov(integralestimates.Y)
+
+    overlap = Array{T, 2}(M, M)
+
+    sortedsets = SortedSet.([volumes[integralestimates.volumeID[i]].pointcloud.pointIDs for i = 1:M])
+
+    @mt_threads for i = 1:M
+        for j = 1:M
+
+            intersectpts = intersect(sortedsets[i], sortedsets[j])
+            unionpts = union(sortedsets[i], sortedsets[j])
+
+            overlap[i, j] = sum(dataset.weights[collect(intersectpts)]) / sum(dataset.weights[collect(unionpts)])
+        end
+    end
+
+    integralestimates.overlap = overlap
     integralestimates.weights_cov = 1 ./ diag(integralestimates.Σ)
+    integralestimates.weights_cov /= sum(integralestimates.weights_cov)
 
-    integral_coeff = ones(T, length(integralestimates)) ./ length(integralestimates) ./ dataset.nsubsets #.* integralestimates.integrals.^2
-    integralestimates.σ = transpose(integral_coeff) * integralestimates.Σ * integral_coeff
+    #integral_coeff = ones(T, length(integralestimates)) ./ length(integralestimates) ./ dataset.nsubsets #.* integralestimates.integrals.^2
+    #e_cov = transpose(integral_coeff) * integralestimates.Σ * integral_coeff
 
-    @log_msg LOG_DEBUG "Covariance σ: $(integralestimates.σ)"
+    i_cov = mean(integralestimates.integrals, AnalyticWeights(integralestimates.weights_cov))
 
-    return integralestimates, rejectedids
+
+    e_cov = 0.0
+    #e_cov2 = 0.0
+    for i=1:M
+        for j=1:M
+            e_cov += integralestimates.weights_cov[i] * integralestimates.weights_cov[j] * integralestimates.Σ[i, j]
+            #e_cov2 += integralestimates.weights_cov[i] * integralestimates.weights_cov[j] * overlap[i, j] * sqrt(integralestimates.Σ[i, i]) * sqrt(integralestimates.Σ[j, j])
+        end
+    end
+    Χ_sq = 0.0
+    for i=1:M
+        for j=1:M
+            Χ_sq += (integralestimates.integrals[i] - i_cov) * overlap[i, j] * integralestimates.Σ[i, j] * (integralestimates.integrals[j] - i_cov)
+        end
+    end
+
+
+    integral_cov = HMIEstimate(i_cov, sqrt(e_cov), integralestimates.weights_cov)
+
+
+    i_std = mean(integralestimates.integrals, ProbabilityWeights(integralestimates.weights_overlap))
+    e_std = sqrt(var(integralestimates.integrals) / sum(integralestimates.weights_overlap))
+    integral_standard = HMIEstimate(i_std, e_std, integralestimates.weights_overlap)
+
+
+    return integralestimates, rejectedids, integral_standard, integral_cov
 end
 
 
