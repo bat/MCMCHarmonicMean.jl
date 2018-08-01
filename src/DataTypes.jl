@@ -232,14 +232,10 @@ Base.show(io::IO, vol::IntegrationVolume) = print(io, "Hyperrectangle: $(vol.poi
 
 mutable struct IntermediateResults{T<:AbstractFloat}
     integrals::Array{T, 1}
-    weights_overlap::Array{T, 1}
-    weights_cov::Array{T, 1}
     volumeID::Array{Int64, 1}
-    overlap::Array{T, 2}
     Y::Array{T, 2}
-    Σ::Array{T, 2}
 end
-IntermediateResults(T::DataType, n::Int64) = IntermediateResults(zeros(T, n), zeros(T, n), zeros(T, n), [Int64(i) for i=1:n], Array{T, 2}(0,0), Array{T, 2}(0,0), Array{T,2}(0,0))
+IntermediateResults(T::DataType, n::Int64) = IntermediateResults(zeros(T, n), [Int64(i) for i=1:n], Array{T,2}(0,0))
 Base.length(x::IntermediateResults) = length(x.integrals)
 
 mutable struct HMIEstimate{T<:AbstractFloat}
@@ -253,7 +249,17 @@ function HMIEstimate(a::HMIEstimate{T}, b::HMIEstimate{T})::HMIEstimate{T} where
     unc = 1 / sqrt(1 / a.uncertainty^2 + 1 / b.uncertainty^2)
     HMIEstimate(val, unc, [a.weights..., b.weights...])
 end
-Base.show(io::IO, ires::HMIEstimate) = print(io, "$(signif(ires.estimate, 6))\t+-\t$(signif(ires.uncertainty, 6))")
+Base.show(io::IO, ires::HMIEstimate) = print(io, "$(signif(ires.estimate, 6))  +-  $(signif(ires.uncertainty, 6))")
+
+
+mutable struct HMIResult{T<:AbstractFloat}
+    result1::HMIEstimate{T}
+    result2::HMIEstimate{T}
+    final::HMIEstimate{T}
+    dat1::Dict{String, Any}
+    dat2::Dict{String, Any}
+end
+HMIResult(T::DataType) = HMIResult(HMIEstimate(T), HMIEstimate(T), HMIEstimate(T), Dict{String, Any}(), Dict{String, Any}())
 
 """
     HMIData{T<:AbstractFloat, I<:Integer}
@@ -284,8 +290,7 @@ mutable struct HMIData{T<:AbstractFloat, I<:Integer}
     rejectedrects2::Vector{I}
     integrals1::IntermediateResults{T}
     integrals2::IntermediateResults{T}
-    integral_standard::HMIEstimate{T}
-    integral_covweighted::HMIEstimate{T}
+    integralestimates::Dict{String, HMIResult}
 end
 
 function HMIData(
@@ -304,8 +309,7 @@ function HMIData(
         Vector{I}(0),
         IntermediateResults(T, 0),
         IntermediateResults(T, 0),
-        HMIEstimate(T),
-        HMIEstimate(T)
+        Dict{String, HMIResult}()
     )
 end
 
@@ -327,6 +331,15 @@ function HMIData(
     HMIData(split_samples(samples, sampleIDs, mcmcstats)...)
 end
 
-Base.show(io::IO, ires::HMIData) = print(io, "Data Set 1: $(length(ires.volumelist1)) Volumes, Data Set 2: $(length(ires.volumelist2))
-\tStandard integration result:\t $(ires.integral_standard)
-\tCov. weighted result:\t\t $(ires.integral_covweighted)")
+function Base.show(io::IO, ires::HMIData)
+    output = "Data Set 1: $(length(ires.volumelist1)) Volumes, Data Set 2: $(length(ires.volumelist2)) Volumes"
+
+    if haskey(ires.integralestimates, "legacy result")
+        output *= "\n\tLegacy Integral Estimate Combination:\t $(ires.integralestimates["legacy result"].final)"
+    end
+    if haskey(ires.integralestimates, "cov. weighted result")
+        output *= "\n\tCorrelation & Covariance Combination:\t $(ires.integralestimates["cov. weighted result"].final)"
+    end
+
+    println(io, output)
+end

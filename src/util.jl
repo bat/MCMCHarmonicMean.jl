@@ -64,8 +64,6 @@ function trim(res::IntermediateResults{T}) where {T<:AbstractFloat}
     @log_msg LOG_DEBUG "Trimming integration results: $(length(deleteids)) entries out of $(length(res.integrals)) deleted"
 
     deleteat!(res.integrals, deleteids)
-    deleteat!(res.weights_overlap, deleteids)
-    deleteat!(res.weights_cov, deleteids)
     deleteat!(res.volumeID, deleteids)
     res.Y = res.Y[:, remainingids]
 

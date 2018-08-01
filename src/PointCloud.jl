@@ -7,15 +7,24 @@
 creates a point cloud by searching the data tree for points which are inside the hyper-rectangle
 The parameter searchpts determines if an array of the point IDs is created as well
 """
-function PointCloud{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, hyperrect::HyperRectVolume{T}, searchpts::Bool)::PointCloud
+function PointCloud(
+    dataset::DataSet{T, I},
+    hyperrect::HyperRectVolume{T},
+    searchpts::Bool)::PointCloud{T, I} where {T<:AbstractFloat, I<:Integer}
+
     result = PointCloud(T, I)
 
     PointCloud!(result, dataset, hyperrect, searchpts)
-    return result
+
+    result
 end
 
 
-function PointCloud!{T<:AbstractFloat, I<:Integer}(cloud::PointCloud{T, I}, dataset::DataSet{T, I}, hyperrect::HyperRectVolume{T}, searchpts::Bool)
+function PointCloud!(
+    cloud::PointCloud{T, I},
+    dataset::DataSet{T, I},
+    hyperrect::HyperRectVolume{T},
+    searchpts::Bool) where {T<:AbstractFloat, I<:Integer}
 
     search!(cloud.searchres, dataset, hyperrect, searchpts)
 
@@ -31,21 +40,30 @@ function PointCloud!{T<:AbstractFloat, I<:Integer}(cloud::PointCloud{T, I}, data
 
     cloud.probfactor = exp(cloud.maxLogProb - cloud.minLogProb)
     cloud.probweightfactor = exp(cloud.maxWeightProb - cloud.minWeightProb)
+
+    nothing
 end
 
-function create_pointweights{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, volumes::Vector{IntegrationVolume{T, I}})::Vector{T}
+function create_pointweights(
+    dataset::DataSet{T, I},
+    volumes::Vector{IntegrationVolume{T, I}},
+    ids::Array{I})::Vector{T} where {T<:AbstractFloat, I<:Integer}
+
     pweights = zeros(T, dataset.N)
 
-    for i in eachindex(volumes)
+    for i in ids
         for p in eachindex(volumes[i].pointcloud.pointIDs)
             pweights[volumes[i].pointcloud.pointIDs[p]] += 1
         end
     end
 
-    return pweights
+    pweights
 end
 
-function Base.copy!{T<:AbstractFloat, I<:Integer}(target::PointCloud{T, I}, src::PointCloud{T, I})
+function Base.copy!(
+    target::PointCloud{T, I},
+    src::PointCloud{T, I}) where {T<:AbstractFloat, I<:Integer}
+
     target.points = src.points
 
     resize!(target.pointIDs, length(src.pointIDs))
@@ -59,4 +77,6 @@ function Base.copy!{T<:AbstractFloat, I<:Integer}(target::PointCloud{T, I}, src:
 
     target.probfactor = src.probfactor
     target.probweightfactor = src.probweightfactor
+
+    nothing
 end

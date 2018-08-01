@@ -1,14 +1,18 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
-function no_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
+function no_whitening(
+    dataset::DataSet{T, I})::WhiteningResult{T} where {T<:AbstractFloat, I<:Integer}
+
     datamean = Vector{T}(0)
 
-    return transform_data(dataset, eye(T, dataset.P), datamean)
+    transform_data(dataset, eye(T, dataset.P), datamean)
 end
 
 
-function cholesky_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
+function cholesky_whitening(
+    dataset::DataSet{T, I})::WhiteningResult{T} where {T<:AbstractFloat, I<:Integer}
+
     datamean = zeros(T, dataset.P)
 
     for p in eachindex(datamean)
@@ -25,10 +29,12 @@ function cholesky_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}
     w = chol(covmatrix_inv)
     wres = convert(Matrix{T}, w)
 
-    return transform_data(dataset, wres, datamean)
+    transform_data(dataset, wres, datamean)
 end
 
-function statistical_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I})::WhiteningResult{T}
+function statistical_whitening(
+    dataset::DataSet{T, I})::WhiteningResult{T} where {T<:AbstractFloat, I<:Integer}
+
     datamean = zeros(T, dataset.P)
 
     for p in eachindex(datamean)
@@ -45,10 +51,15 @@ function statistical_whitening{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T,
     w = inv(full(sqrt.(D))) * w_d
     wres = convert(Matrix{T}, w)
 
-    return transform_data(dataset, wres, datamean)
+    transform_data(dataset, wres, datamean)
 end
 
-function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W::Matrix{T}, datamean::Vector{T}, substractmean::Bool = false)::WhiteningResult{T}
+function transform_data(
+    dataset::DataSet{T, I},
+    W::Matrix{T},
+    datamean::Vector{T},
+    substractmean::Bool = false)::WhiteningResult{T} where {T<:AbstractFloat, I<:Integer}
+
     local determinant::T
 
     if substractmean
@@ -71,5 +82,5 @@ function transform_data{T<:AbstractFloat, I<:Integer}(dataset::DataSet{T, I}, W:
     @log_msg LOG_DEBUG "Determinant:\t" * string(determinant)
     @log_msg LOG_DEBUG "Suggested Target Probability Factor:\t" * string(suggTargetProb)
 
-    return WhiteningResult(determinant, suggTargetProb, W, datamean)
+    WhiteningResult(determinant, suggTargetProb, W, datamean)
 end

@@ -72,6 +72,8 @@ function hm_integrate(
     #time 125ms, 33MB
     hm_integratehyperrectangles(result, settings)
 
+    result.integralestimates["legacy result"] = hm_combineresults_legacy(result)
+    result.integralestimates["cov. weighted result"] = hm_combineresults_covweighted(result)
 
     return result
 end
@@ -272,13 +274,10 @@ function hm_integratehyperrectangles(
 
     progressbar = Progress(nRes)
 
-    result.integrals1, result.rejectedrects1, integral_standard1, integral_cov1 = hm_integratehyperrectangles_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
-    result.integrals2, result.rejectedrects2, integral_standard2, integral_cov2 = hm_integratehyperrectangles_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals1, result.rejectedrects1 = hm_integratehyperrectangles_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals2, result.rejectedrects2 = hm_integratehyperrectangles_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
 
     finish!(progressbar)
-
-    result.integral_standard = HMIEstimate(integral_standard1, integral_standard2)
-    result.integral_covweighted = HMIEstimate(integral_cov1, integral_cov2)
 end
 
 function hm_integratehyperrectangles_dataset(
@@ -286,7 +285,7 @@ function hm_integratehyperrectangles_dataset(
     dataset::DataSet{T, I},
     determinant::T,
     progressbar::Progress,
-    settings::HMISettings)::Tuple{IntermediateResults{T}, Vector{I}, HMIEstimate{T}, HMIEstimate{T}} where {T<:AbstractFloat, I<:Integer}
+    settings::HMISettings)::Tuple{IntermediateResults{T}, Vector{I}} where {T<:AbstractFloat, I<:Integer}
 
     if length(volumes) < 1
         @log_msg LOG_ERROR "No hyper-rectangles could be created. Try integration with more points or different settings."
@@ -295,17 +294,8 @@ function hm_integratehyperrectangles_dataset(
     integralestimates = IntermediateResults(T, length(volumes))
     integralestimates.Y = Array{T, 2}(dataset.nsubsets, length(volumes))
 
-    pweights = create_pointweights(dataset, volumes)
-    integralestimates.weights_overlap::Array{T, 1} = zeros(T, length(volumes))
-
     @mt_threads for i in eachindex(volumes)
         integralestimates.Y[:, i], integralestimates.integrals[i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
-        #integralestimates.integrals[i] = 1.0 / mean(view(integralestimates.Y, :, i))
-
-        trw = sum(dataset.weights[volumes[i].pointcloud.pointIDs])
-        for id in eachindex(volumes[i].pointcloud.pointIDs)
-            integralestimates.weights_overlap[i] += 1.0 / trw / pweights[volumes[i].pointcloud.pointIDs[id]]
-        end
 
         lock(BAT.Logging._global_lock) do
             next!(progressbar)
@@ -313,63 +303,83 @@ function hm_integratehyperrectangles_dataset(
     end
 
     rejectedids = trim(integralestimates)
-    M = length(integralestimates)
 
-    @log_msg LOG_TRACE "Rectangle weights: $(integralestimates.weights_overlap))"
-
-    integralestimates.Σ = cov(integralestimates.Y) ./ dataset.nsubsets
-
-    overlap = Array{T, 2}(M, M)
-
-    sortedsets = SortedSet.([volumes[integralestimates.volumeID[i]].pointcloud.pointIDs for i = 1:M])
-
-    @mt_threads for i = 1:M
-        for j = 1:M
-
-            intersectpts = intersect(sortedsets[i], sortedsets[j])
-            unionpts = union(sortedsets[i], sortedsets[j])
-
-            overlap[i, j] = sum(dataset.weights[collect(intersectpts)]) / sum(dataset.weights[collect(unionpts)])
-        end
-    end
-
-    integralestimates.overlap = overlap
-    integralestimates.weights_cov = 1 ./ diag(integralestimates.Σ)
-    integralestimates.weights_cov /= sum(integralestimates.weights_cov)
-
-    #integral_coeff = ones(T, length(integralestimates)) ./ length(integralestimates) ./ dataset.nsubsets #.* integralestimates.integrals.^2
-    #e_cov = transpose(integral_coeff) * integralestimates.Σ * integral_coeff
-
-    i_cov = mean(integralestimates.integrals, AnalyticWeights(integralestimates.weights_cov))
-
-
-    e_cov = 0.0
-    #e_cov2 = 0.0
-    for i=1:M
-        for j=1:M
-            e_cov += integralestimates.weights_cov[i] * integralestimates.weights_cov[j] * integralestimates.Σ[i, j]
-            #e_cov2 += integralestimates.weights_cov[i] * integralestimates.weights_cov[j] * overlap[i, j] * sqrt(integralestimates.Σ[i, i]) * sqrt(integralestimates.Σ[j, j])
-        end
-    end
-    Χ_sq = 0.0
-    for i=1:M
-        for j=1:M
-            Χ_sq += (integralestimates.integrals[i] - i_cov) * overlap[i, j] * integralestimates.Σ[i, j] * (integralestimates.integrals[j] - i_cov)
-        end
-    end
-
-
-    integral_cov = HMIEstimate(i_cov, sqrt(e_cov), integralestimates.weights_cov)
-
-
-    i_std = mean(integralestimates.integrals, ProbabilityWeights(integralestimates.weights_overlap))
-    e_std = sqrt(var(integralestimates.integrals) / sum(integralestimates.weights_overlap))
-    integral_standard = HMIEstimate(i_std, e_std, integralestimates.weights_overlap)
-
-
-    return integralestimates, rejectedids, integral_standard, integral_cov
+    return integralestimates, rejectedids
 end
 
+
+function hm_combineresults_legacy(result::HMIData{T, I}) where {T<:AbstractFloat, I<:Integer}
+    result_legacy = HMIResult(T)
+    result_legacy.result1, result_legacy.dat2 = hm_combineresults_legacy_dataset(result.dataset1, result.integrals2, result.volumelist2)
+    result_legacy.result2, result_legacy.dat2 = hm_combineresults_legacy_dataset(result.dataset2, result.integrals1, result.volumelist1)
+    result_legacy.final = HMIEstimate(result_legacy.result1, result_legacy.result2)
+
+    result_legacy
+end
+
+function hm_combineresults_legacy_dataset(
+    dataset::DataSet{T, I},
+    integralestimates::IntermediateResults{T},
+    volumes::Array{IntegrationVolume{T, I}, 1}) where {T<:AbstractFloat, I<:Integer}
+
+    dat = Dict{String, Any}()
+
+    pweights = create_pointweights(dataset, volumes, integralestimates.volumeID)
+
+    weights_overlap::Array{T, 1} = zeros(T, length(integralestimates))
+
+    for i = 1:length(integralestimates)
+        vol_id = integralestimates.volumeID[i]
+        trw = sum(dataset.weights[volumes[vol_id].pointcloud.pointIDs])
+        for id in eachindex(volumes[vol_id].pointcloud.pointIDs)
+            weights_overlap[i] += 1.0 / trw / pweights[volumes[vol_id].pointcloud.pointIDs[id]]
+        end
+    end
+
+    M = length(integralestimates)
+
+    i_std = mean(integralestimates.integrals, ProbabilityWeights(weights_overlap))
+    e_std = sqrt(var(integralestimates.integrals) / sum(weights_overlap))
+
+    HMIEstimate(i_std, e_std, weights_overlap), dat
+end
+
+function hm_combineresults_covweighted(result::HMIData{T, I}) where {T<:AbstractFloat, I<:Integer}
+    result_covweighted = HMIResult(T)
+    result_covweighted.result1, result_covweighted.dat2 = hm_combineresults_covweighted_dataset(result.dataset1,
+        result.integrals2, result.volumelist2)
+    result_covweighted.result2, result_covweighted.dat2 = hm_combineresults_covweighted_dataset(result.dataset2,
+        result.integrals1, result.volumelist1)
+    result_covweighted.final = HMIEstimate(result_covweighted.result1, result_covweighted.result2)
+
+    result_covweighted
+end
+
+function hm_combineresults_covweighted_dataset(
+    dataset::DataSet{T, I},
+    integralestimates::IntermediateResults{T},
+    volumes::Array{IntegrationVolume{T, I}, 1}) where {T<:AbstractFloat, I<:Integer}
+
+    dat = Dict{String, Any}()
+    dat["Σ"] = Σ = cov(integralestimates.Y) ./ dataset.nsubsets
+    dat["overlap"] = overlap = calculate_overlap(dataset, volumes, integralestimates)
+
+    M = length(integralestimates)
+
+    weights_cov = 1 ./ diag(Σ)
+    weights_cov /= sum(weights_cov)
+
+    i_cov = mean(integralestimates.integrals, AnalyticWeights(weights_cov))
+
+    e_cov = 0.0
+    for i=1:M
+        for j=1:M
+            e_cov += weights_cov[i] * weights_cov[j] * Σ[i, j]
+        end
+    end
+
+    HMIEstimate(i_cov, sqrt(e_cov), weights_cov), dat
+end
 
 """
 function findtolerance(

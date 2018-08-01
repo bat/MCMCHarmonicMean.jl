@@ -3,8 +3,8 @@
 
 mutable struct DataTree{
     T<:AbstractFloat,
-    I<:Integer
-} <: SearchTree
+    I<:Integer} <: SearchTree
+
     cuts::I
     leafsize::I
 
@@ -16,7 +16,12 @@ DataTree(T::DataType, I::DataType) = DataTree{T, I}(zero(I), zero(I), Vector{I}(
 isinitialized(x::DataTree) = !(iszero(x.cuts) && iszero(x.leafsize) && isempty(x.dimensionlist) && iszero(x.recursiondepth) && isempty(x.cutlist))
 
 
-function create_search_tree(dataset::DataSet{T, I}, progressbar::Progress; mincuts::I = 8, maxleafsize::I = 200)::DataTree{T, I} where {T<:AbstractFloat, I<:Integer}
+function create_search_tree(
+    dataset::DataSet{T, I},
+    progressbar::Progress;
+    mincuts::I = 8,
+    maxleafsize::I = 200)::DataTree{T, I} where {T<:AbstractFloat, I<:Integer}
+
     sugg_cuts = (dataset.N / maxleafsize) ^ (1 / dataset.P)
     cuts = ceil(I, max(mincuts, sugg_cuts))
 
@@ -47,8 +52,7 @@ function createleafs(
     cutlist::Vector{T},
     cuts::I,
     leafsize::I,
-    StartID::I = 0
-    ) where {T<:AbstractFloat, I<:Integer}
+    StartID::I = 0) where {T<:AbstractFloat, I<:Integer}
 
     remainingRec::I = length(dimensionlist)
 
@@ -93,24 +97,23 @@ function createleafs(
     end
 end
 
-function search{T<:AbstractFloat, I<:Integer}(
+function search(
     dataset::DataSet{T, I},
     searchvol::HyperRectVolume{T},
-    searchpoints::Bool = false
-    )::SearchResult
+    searchpoints::Bool = false)::SearchResult where {T<:AbstractFloat, I<:Integer}
 
     res = SearchResult(T, I)
     #searchpoints = false
     search!(res, dataset, searchvol, searchpoints)
 
-    return res
+    res
 end
 
-function search!{T<:AbstractFloat, I<:Integer}(
+function search!(
     result::SearchResult{T, I},
     dataset::DataSet{T, I},
     searchvol::HyperRectVolume{T},
-    searchpoints::Bool = false)
+    searchpoints::Bool = false) where {T<:AbstractFloat, I<:Integer}
 
     result.points = 0
     resize!(result.pointIDs, 0)
@@ -204,9 +207,9 @@ function search!{T<:AbstractFloat, I<:Integer}(
 
 end
 
-@inline function getDataPositions{T<:AbstractFloat, I<:Integer}(
+@inline function getDataPositions(
     dataset::DataSet{T, I},
-    TreePos::Vector{I})
+    TreePos::Vector{I}) where {T<:AbstractFloat, I<:Integer}
 
     maxRecursion = dataset.partitioningtree.recursiondepth
     startID = 1
@@ -224,13 +227,13 @@ end
 end
 
 
-function searchInterval!{T<:AbstractFloat, I<:Integer}(
+function searchInterval!(
     result::SearchResult{T, I},
     dataset::DataSet{T, I},
     searchvol::HyperRectVolume{T},
     start::I,
     stop::I,
-    searchpoints::Bool)
+    searchpoints::Bool) where {T<:AbstractFloat, I<:Integer}
 
     dimsort = dataset.partitioningtree.dimensionlist[dataset.partitioningtree.recursiondepth]
 

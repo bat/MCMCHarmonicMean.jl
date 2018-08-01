@@ -8,8 +8,7 @@ creates a hypercube shaped spatial volume
 """
 function HyperCubeVolume(
     origin::Vector{T},
-    edgelength::T
-)::HyperRectVolume{T} where {T<:AbstractFloat}
+    edgelength::T)::HyperRectVolume{T} where {T<:AbstractFloat}
 
     dim = length(origin)
     lo = Vector{T}(dim)
@@ -17,7 +16,7 @@ function HyperCubeVolume(
 
     _setcubeboundaries!(lo, hi, origin, edgelength)
 
-    return HyperRectVolume(lo, hi)
+    HyperRectVolume(lo, hi)
 end
 
 """
@@ -28,23 +27,25 @@ resizes a hypercube shaped spatial volume
 function HyperCubeVolume!(
     rect::HyperRectVolume{T},
     neworigin::Vector{T},
-    newedgelength::T
-) where {T<:AbstractFloat}
+    newedgelength::T) where {T<:AbstractFloat}
 
     _setcubeboundaries!(rect.lo, rect.hi, neworigin, newedgelength)
+
+    nothing
 end
 
 @inline function _setcubeboundaries!(
     lo::Vector{T},
     hi::Vector{T},
     origin::Vector{T},
-    edgelength::T
-) where {T<:AbstractFloat}
+    edgelength::T) where {T<:AbstractFloat}
 
     for i = 1:length(lo)
         lo[i] = origin[i] - edgelength * 0.5
         hi[i] = origin[i] + edgelength * 0.5
     end
+
+    nothing
 end
 
 """
@@ -55,8 +56,7 @@ finds possible starting points for the hyperrectangle creation
 function find_hypercube_centers(
     dataset::DataSet{T, I},
     whiteningresult::WhiteningResult{T},
-    settings::HMISettings
-)::Bool where {T<:AbstractFloat, I<:Integer}
+    settings::HMISettings)::Bool where {T<:AbstractFloat, I<:Integer}
 
     sortLogProb = sortperm(dataset.logprob, rev = true)
 
@@ -110,17 +110,15 @@ end
 function find_density_test_cube_edgelength(
     mode::Vector{T},
     dataset::DataSet{T, I},
-    points::I = 100
-)::T where {T<:AbstractFloat, I<:Integer}
+    points::I = 100)::T where {T<:AbstractFloat, I<:Integer}
 
-    return find_density_test_cube(mode, dataset, points)[1]
+    find_density_test_cube(mode, dataset, points)[1]
 end
 
 function find_density_test_cube(
     mode::Vector{T},
     dataset::DataSet{T, I},
-    points::I
-)::Tuple{T, IntegrationVolume{T, I}} where {T<:AbstractFloat, I<:Integer}
+    points::I)::Tuple{T, IntegrationVolume{T, I}} where {T<:AbstractFloat, I<:Integer}
 
     P = dataset.P
 
@@ -153,5 +151,6 @@ function find_density_test_cube(
     end
 
     @log_msg LOG_TRACE "Tolerance Test Cube: Iterations $iterations\tPoints: $(intvol.pointcloud.points)\ttarget Points: $points"
-    return l, intvol
+
+    l, intvol
 end
