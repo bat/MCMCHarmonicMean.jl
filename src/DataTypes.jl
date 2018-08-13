@@ -71,7 +71,7 @@ function DataSet(
     P, N = size(data)
 
     if iszero(nsubsets)
-        nsubsets = 5
+        nsubsets = 10
     end
 
     maxbatchsize = sum(weights) / 10 / nsubsets

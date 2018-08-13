@@ -346,7 +346,7 @@ end
 
 function hm_combineresults_covweighted(result::HMIData{T, I}) where {T<:AbstractFloat, I<:Integer}
     result_covweighted = HMIResult(T)
-    result_covweighted.result1, result_covweighted.dat2 = hm_combineresults_covweighted_dataset(result.dataset1,
+    result_covweighted.result1, result_covweighted.dat1 = hm_combineresults_covweighted_dataset(result.dataset1,
         result.integrals2, result.volumelist2)
     result_covweighted.result2, result_covweighted.dat2 = hm_combineresults_covweighted_dataset(result.dataset2,
         result.integrals1, result.volumelist1)
