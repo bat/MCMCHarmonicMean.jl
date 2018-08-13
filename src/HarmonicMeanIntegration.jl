@@ -302,7 +302,7 @@ function hm_integratehyperrectangles_dataset(
         end
     end
 
-    rejectedids = trim(integralestimates)
+    rejectedids = trim(integralestimates, settings.dotrimming)
 
     return integralestimates, rejectedids
 end

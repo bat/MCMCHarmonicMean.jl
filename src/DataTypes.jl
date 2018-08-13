@@ -71,7 +71,7 @@ function DataSet(
     P, N = size(data)
 
     if iszero(nsubsets)
-        nsubsets = 10
+        nsubsets = 5
     end
 
     maxbatchsize = sum(weights) / 10 / nsubsets
@@ -128,10 +128,11 @@ mutable struct HMISettings
     rect_increase::AbstractFloat
     useMultiThreading::Bool
     warning_minstartingids::Integer
+    dotrimming::Bool
 end
-HMIFastSettings() =      return HMISettings(cholesky_whitening, 100,   0.1, 0.1, true, 16)
-HMIStandardSettings() =  return HMISettings(cholesky_whitening, 1000,  0.5, 0.1, true, 16)
-HMIPrecisionSettings() = return HMISettings(cholesky_whitening, 10000, 2.5, 0.1, true, 16)
+HMIFastSettings() =      return HMISettings(cholesky_whitening, 100,   0.1, 0.1, true, 16, true)
+HMIStandardSettings() =  return HMISettings(cholesky_whitening, 1000,  0.5, 0.1, true, 16, true)
+HMIPrecisionSettings() = return HMISettings(cholesky_whitening, 10000, 2.5, 0.1, true, 16, true)
 
 """
     WhiteningResult{T<:AbstractFloat}

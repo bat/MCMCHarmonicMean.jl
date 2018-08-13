@@ -58,50 +58,23 @@ function trim(x::Array)
     x
 end
 
-function trim(res::IntermediateResults{T}) where {T<:AbstractFloat}
+function trim(
+    res::IntermediateResults{T},
+    dotrimming::Bool)::Array{Int64, 1} where {T<:AbstractFloat}
 
     deleteids, remainingids = _trim(res.integrals)
     @log_msg LOG_DEBUG "Trimming integration results: $(length(deleteids)) entries out of $(length(res.integrals)) deleted"
 
-    deleteat!(res.integrals, deleteids)
-    deleteat!(res.volumeID, deleteids)
-    res.Y = res.Y[:, remainingids]
+    if dotrimming
+        deleteat!(res.integrals, deleteids)
+        deleteat!(res.volumeID, deleteids)
+        res.Y = res.Y[:, remainingids]
+    end
 
     deleteids
 end
 
 
-
-function calculateNess(dataset::DataSet{T, I}) where {T<:AbstractFloat, I<:Integer}
-    pj = zeros(sum(dataset.weights))
-    μ = zeros(dataset.P)
-    for p = 1:dataset.P
-        μ[p] = mean(view(dataset.data, p, :), FrequencyWeights(dataset.weights))
-    end
-
-
-    σ = zeros(dataset.P)
-    for p=1:dataset.P
-        σ[p] = var(view(dataset.data, p, :), FrequencyWeights(dataset.weights))
-    end
-
-    ∑_σ = sum(σ)
-
-    cntr = 1
-    for n = 1:dataset.N
-        for w=1:dataset.weights[n]
-            for p=1:dataset.P
-                pj[cntr] += dataset.data[p, n] * dataset.data[p, n+1>dataset.N?1:n+1] - μ[p]^2
-            end
-            pj[cntr] \= ∑_σ
-            cntr += 1
-        end
-    end
-
-    Ness = sum(dataset.weights) / (1 + 2 * sum(pj))
-
-    return Ness
-end
 
 
 function split_samples(
