@@ -143,6 +143,11 @@ function hm_findstartingsamples(
     result::HMIData{T, I},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer}
 
+    #if hyper-rectangles are already created and only need to be populated using different data sets
+    if !isempty(result.volumelist1) && !isempty(result.volumelist2)
+        return true
+    end
+
     notsinglemode = true
     @log_msg LOG_INFO "Determine Hyperrectangle Starting Samples"
     if isempty(result.dataset1.startingIDs)
@@ -158,6 +163,11 @@ end
 function hm_determinetolerance(
     result::HMIData{T, I},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer}
+
+    #if hyper-rectangles are already created and only need to be populated using different data sets
+    if !isempty(result.volumelist1) && !isempty(result.volumelist2)
+        return
+    end
 
     (iszero(result.dataset1.tolerance) || iszero(result.dataset2.tolerance)) && @log_msg LOG_INFO "Determine Tolerances for Hyperrectangle Creation"
 

@@ -54,6 +54,14 @@ bat_samples = sample()
 data = HMIData(bat_samples)
 hm_integrate(data)
 
+#you can also re-run the integration without modifiying the already created hyper-rectangles, using different
+#integration settings or different data sets
+bat_samples2 = sample()
+ds1, ds2 = split_samples(bat_samples...)
+data.dataset1 = ds1
+data.dataset2 = ds2
+hm_integrate(data)
+
 
 #other samples
 nsamples = 10000
