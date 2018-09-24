@@ -13,8 +13,9 @@ using ParallelProcessingTools
 using Base.Threads
 using ElasticArrays
 using DataStructures
+using RecipesBase
 
-include("bat_dependencies.jl")
+include("spatial_volume.jl")
 #using BAT
 #using BAT.Logging
 #@enable_logging
@@ -23,21 +24,22 @@ include("bat_dependencies.jl")
 using Base.CoreLogging
 
 
-include("./data_types.jl")
-include("./data_tree.jl")
+include("data_types.jl")
+include("data_tree.jl")
 
-include("./util.jl")
+include("util.jl")
 
-include("./point_cloud.jl")
-include("./integration_volume.jl")
+include("point_cloud.jl")
+include("integration_volume.jl")
 
 
-include("./hyper_rectangle.jl")
-include("./whitening_transformation.jl")
-include("./harmonic_mean_integration.jl")
+include("hyper_rectangle.jl")
+include("whitening_transformation.jl")
+include("harmonic_mean_integration.jl")
+include("hm_integration_rectangle.jl")
 
-include("./uncertainty.jl")
-
+include("uncertainty.jl")
+#include("plotting_recipes.jl")
 
 export hm_init
 export hm_whiteningtransformation

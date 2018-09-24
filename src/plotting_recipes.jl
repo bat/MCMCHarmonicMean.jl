@@ -1,49 +1,42 @@
 
-using Plots, LaTeXStrings
-pyplot()
-Plots.scalefontsizes(2.5)
 
-function createRectangle(spatialvolume::HyperRectVolume, FirstDim::Int64, SecondDim::Int64)
-    xpoints = Array{Float64, 1}(6)
-    ypoints = Array{Float64, 1}(6)
+function create_rectangle(rect::MCMCHarmonicMean.HyperRectVolume, dim1::Integer, dim2::Integer)
+    xpoints = zeros(Float64, 6)
+    ypoints = zeros(Float64, 6)
 
-    xpoints[1] = spatialvolume.lo[FirstDim]
-    xpoints[2] = spatialvolume.lo[FirstDim]
-    xpoints[3] = spatialvolume.hi[FirstDim]
-    xpoints[4] = spatialvolume.hi[FirstDim]
-    xpoints[5] = spatialvolume.lo[FirstDim]
+    xpoints[1] = rect.lo[FirstDim]
+    xpoints[2] = rect.lo[FirstDim]
+    xpoints[3] = rect.hi[FirstDim]
+    xpoints[4] = rect.hi[FirstDim]
+    xpoints[5] = rect.lo[FirstDim]
     xpoints[6] = NaN    #necessary to group rectangles under same label
-    ypoints[1] = spatialvolume.lo[SecondDim]
-    ypoints[2] = spatialvolume.hi[SecondDim]
-    ypoints[3] = spatialvolume.hi[SecondDim]
-    ypoints[4] = spatialvolume.lo[SecondDim]
-    ypoints[5] = spatialvolume.lo[SecondDim]
+    ypoints[1] = rect.lo[SecondDim]
+    ypoints[2] = rect.hi[SecondDim]
+    ypoints[3] = rect.hi[SecondDim]
+    ypoints[4] = rect.lo[SecondDim]
+    ypoints[5] = rect.lo[SecondDim]
     ypoints[6] = NaN
 
     xpoints, ypoints
 end
 
 
-dataset = data.dataset2
-volumes = data.volumelist1
-cubes = data.cubelist1
-rejectedids = data.rejectedrects1
+@recipe function f(dataset::DataSet, dim1::Integer = 1, dim2::Integer = 2)
+    @assert dataset.P > 1
 
-#=
-dataset = data.dataset1
-volumes = data.volumelist2
-cubes = data.cubelist2
-rejectedids = data.rejectedrects2
-=#
+    xlimits=(minimum(dataset.data[dim1, :]), maximum(dataset.data[dim1, :]))
+    ylimits=(minimum(dataset.data[dim2, :]), maximum(dataset.data[dim2, :]))
 
-
-FirstDim = 1
-SecondDim = 2
-xlimits=(minimum(dataset.data[FirstDim, :]), maximum(dataset.data[FirstDim, :]))
-ylimits=(minimum(dataset.data[SecondDim, :]), maximum(dataset.data[SecondDim, :]))
-
-scatter(dataset.data[FirstDim, :], dataset.data[SecondDim, :], c=:red, marker=:circle, markersize = 0.5 * sqrt.(dataset.weights),
-    size=(1000,1000), markerstrokewidth=0, xlim=xlimits, ylim=ylimits, label=L"$10^5$ Samples", legend=:topright)
+    x, y = dataset.data[dim1, :], dataset.data[dim2, :]
+    #c:=:red
+    #marker=:circle
+    #markersize = 0.5 * sqrt.(dataset.weights)
+    #size=(1000,1000)
+    #markerstrokewidth=0
+    #xlim=xlimits
+    #ylim=ylimits
+    #legend=:topright
+end
 
 
 rejected = length(rejectedids)

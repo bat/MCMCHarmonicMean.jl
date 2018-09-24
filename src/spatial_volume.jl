@@ -1,12 +1,7 @@
 abstract type SpatialVolume{T<:Real} end
 
 
-
-Base.eltype(b::SpatialVolume{T}) where T = T
-
-
 struct HyperRectVolume{T<:Real} <: SpatialVolume{T}
-    # ToDo: Use origin and widths instead of lo and hi, as in GeometryTypes.HyperRectangle?
     lo::Vector{T}
     hi::Vector{T}
 
@@ -17,28 +12,20 @@ struct HyperRectVolume{T<:Real} <: SpatialVolume{T}
 end
 
 HyperRectVolume(lo::Vector{T}, hi::Vector{T}) where {T<:Real} = HyperRectVolume{T}(lo, hi)
-
 Base.ndims(vol::HyperRectVolume) = size(vol.lo, 1)
 
-function Base.isempty(vol::HyperRectVolume)
-        @inbounds for i in eachindex(vol.lo, vol.hi)
-             (vol.lo[i] > vol.hi[i]) && return true
-        end
-        isempty(vol.lo)
+struct HyperSphereVolume{T<:Real} <: SpatialVolume{T}
+    origin::Vector{T}
+    radius::T
+
+    function HyperRectVolume{T}(origin::Vector{T}, radius::T) where {T<:Real}
+        new{T}(origin, radius)
+    end
 end
 
-Base.similar(vol::HyperRectVolume) = HyperRectVolume(similar(vol.lo), similar(vol.hi))
+HyperSphereVolume(origin::Vector{T}, radius::T) where {T<:Real} = HyperRectVolume{T}(origin, radius)
+Base.ndims(vol::HyperSphereVolume) = length(origin)
 
-Base.in(x::AbstractVector, vol::HyperRectVolume) =
-    _all_lteq(vol.lo, x, vol.hi)
-
-
-function Base.intersect(a::HyperRectVolume, b::HyperRectVolume)
-    c = similar(a)
-    c.lo .= max.(a.lo, b.lo)
-    c.hi .= min.(a.hi, b.hi)
-    c
-end
 
 
 #=

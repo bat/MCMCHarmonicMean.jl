@@ -153,7 +153,12 @@ isinitialized(x::WhiteningResult) = !(iszero(x.determinant) && iszero(x.targetpr
 
 Stores the results of the space partitioning tree's search function
 # Variables
-- 'pointIDs::Vector{I}' : the IDs of the points found, might be empty because it is optional
+- 'pointIDs::Vector{I}' : the IDs of
+nsamples = 10000
+pdf_gauss(x, σ, μ) = log(1.0 / sqrt(2 * pi * σ^2) * exp(-(x-μ)^2 / (2σ^2)))
+samples = randn(1, nsamples)
+ds = DataSet(samples, pdf_gauss.(samples[1, :], 1.0, 0.0), ones(nsamples))
+data = HMIData(ds) the points found, might be empty because it is optional
 - 'points::I' : The number of points found.
 - 'maxLogProb::T' : the maximum log. probability of the points found.
 - 'minLogProb::T' : the minimum log. probability of the points found.
@@ -216,9 +221,9 @@ Base.show(io::IO, cloud::PointCloud) = print(io, "Point Cloud with $(cloud.point
 
 Hold the point cloud and the spatial volume for integration.
 """
-mutable struct IntegrationVolume{T<:AbstractFloat, I<:Integer}
+mutable struct IntegrationVolume{T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     pointcloud::PointCloud{T, I}
-    spatialvolume::HyperRectVolume{T}
+    spatialvolume::V
     volume::T
 end
 Base.show(io::IO, vol::IntegrationVolume) = print(io, "Hyperrectangle: $(vol.pointcloud.points) points, $(vol.volume) Volume")
@@ -273,14 +278,14 @@ the starting ids, and the average number of points and volume of the created hyp
 - 'whiteningresult::WhiteningResult{T}' : the results of the whitening transformation
 - 'integrals::Vector{T}' : The integral estimates of the different hyper-rectangles
 """
-mutable struct HMIData{T<:AbstractFloat, I<:Integer}
+mutable struct HMIData{T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     dataset1::DataSet{T, I}
     dataset2::DataSet{T, I}
     whiteningresult::WhiteningResult{T}
     volumelist1::Vector{IntegrationVolume{T, I}}
     volumelist2::Vector{IntegrationVolume{T, I}}
-    cubelist1::Vector{HyperRectVolume{T}}
-    cubelist2::Vector{HyperRectVolume{T}}
+    cubelist1::Vector{V}
+    cubelist2::Vector{V}
     rejectedrects1::Vector{I}
     rejectedrects2::Vector{I}
     integrals1::IntermediateResults{T}
@@ -290,7 +295,8 @@ end
 
 function HMIData(
     dataset1::DataSet{T, I},
-    dataset2::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
+    dataset2::DataSet{T, I},
+    dataType::DataType = HyperRectVolume{T})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
 
     HMIData(
         dataset1,
@@ -298,8 +304,8 @@ function HMIData(
         WhiteningResult(T),
         Vector{IntegrationVolume{T, I}}(undef, 0),
         Vector{IntegrationVolume{T, I}}(undef, 0),
-        Vector{HyperRectVolume{T}}(undef, 0),
-        Vector{HyperRectVolume{T}}(undef, 0),
+        Vector{dataType}(undef, 0),
+        Vector{dataType}(undef, 0),
         zeros(I, 0),
         zeros(I, 0),
         IntermediateResults(T, 0),
