@@ -63,7 +63,7 @@ function trim(
     dotrimming::Bool)::Array{Int64, 1} where {T<:AbstractFloat}
 
     deleteids, remainingids = _trim(res.integrals)
-    @log_msg LOG_DEBUG "Trimming integration results: $(length(deleteids)) entries out of $(length(res.integrals)) deleted"
+    @debug "Trimming integration results: $(length(deleteids)) entries out of $(length(res.integrals)) deleted"
 
     if dotrimming
         deleteat!(res.integrals, deleteids)
@@ -77,20 +77,6 @@ end
 
 
 
-function split_samples(
-    samples::DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}},
-    sampleIDs::MCMCSampleIDVector,
-    mcmcstats::MCMCBasicStats
-)::Tuple{DataSet{T, I}, DataSet{T, I}} where {T<:Real, I<:Integer}
-
-    N = length(sampleIDs)
-    n = floor(Int64, N / 2)
-
-    ds1 = DataSet(samples.params[:, 1:n], samples.log_value[1:n], samples.weight[1:n])
-    ds2 = DataSet(samples.params[:, n+1:N], samples.log_value[n+1:N], samples.weight[n+1:N])
-
-    return ds1, ds2
-end
 
 function split_dataset(dataset::DataSet{T, I})::Tuple{DataSet{T, I}, DataSet{T, I}} where {T<:Real, I<:Integer}
     N = dataset.N

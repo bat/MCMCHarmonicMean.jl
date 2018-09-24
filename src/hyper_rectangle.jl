@@ -2,17 +2,17 @@
 
 
 """
-    HyperCubeVolume{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVolume
+    create_hypercube{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVolume
 
 creates a hypercube shaped spatial volume
 """
-function HyperCubeVolume(
+function create_hypercube(
     origin::Vector{T},
     edgelength::T)::HyperRectVolume{T} where {T<:AbstractFloat}
 
     dim = length(origin)
-    lo = Vector{T}(dim)
-    hi = Vector{T}(dim)
+    lo = zeros(T, dim)
+    hi = zeros(T, dim)
 
     _setcubeboundaries!(lo, hi, origin, edgelength)
 
@@ -20,11 +20,11 @@ function HyperCubeVolume(
 end
 
 """
-    HyperCubeVolume{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVolume
+    create_hypercube!{T<:Real}(origin::Vector{T}, edgelength::T)::HyperRectVolume
 
 resizes a hypercube shaped spatial volume
 """
-function HyperCubeVolume!(
+function modify_hypercube!(
     rect::HyperRectVolume{T},
     neworigin::Vector{T},
     newedgelength::T) where {T<:AbstractFloat}
@@ -62,15 +62,15 @@ function find_hypercube_centers(
 
     NMax = min(settings.max_startingIDs, round(I, sqrt(dataset.N * settings.max_startingIDs_fraction)))
     NConsidered = round(I, sqrt(dataset.N) * settings.max_startingIDs_fraction)
-    @log_msg LOG_DEBUG "Considered seed samples $NConsidered"
+    @debug "Considered seed samples $NConsidered"
 
     discardedsamples = falses(dataset.N)
 
     testlength = find_density_test_cube_edgelength(dataset.data[:, sortLogProb[1]], dataset, round(I, sqrt(dataset.N)))
-    @log_msg LOG_DEBUG "Edge length of global mode cube: $testlength"
+    @debug "Edge length of global mode cube: $testlength"
 
     maxprob = dataset.logprob[sortLogProb[1]]
-    startingsamples = Array{I, 1}(NMax)
+    startingsamples = zeros(I, NMax)
     cntr = 0
     @showprogress for n::I in sortLogProb[1:NConsidered]
         if discardedsamples[n]
@@ -83,10 +83,10 @@ function find_hypercube_centers(
         cntr += 1
         startingsamples[cntr] = n
 
-        cubevol = HyperCubeVolume(dataset.data[:, n], testlength)
+        cubevol = create_hypercube(dataset.data[:, n], testlength)
         cube = IntegrationVolume(dataset, cubevol, true)
 
-        discardedsamples[cube.pointcloud.pointIDs] = true
+        discardedsamples[cube.pointcloud.pointIDs] .= true
     end
     resize!(startingsamples, cntr)
 
@@ -97,11 +97,11 @@ function find_hypercube_centers(
         if step == 0 step = 1 end
         startingsamples = sortLogProb[1:step:stop]
         success = false
-        @log_msg LOG_WARNING "Returned minimum number of starting points: $(settings.warning_minstartingids)"
+        @warn "Returned minimum number of starting points: $(settings.warning_minstartingids)"
     end
 
 
-    @log_msg LOG_DEBUG "Selected Starting Samples: $cntr out of $(dataset.N) points"
+    @debug "Selected Starting Samples: $cntr out of $(dataset.N) points"
     dataset.startingIDs = startingsamples
 
     success
@@ -127,7 +127,7 @@ function find_density_test_cube(
     mult::T = 2.0^(1.0 / P)
     last_change = 0
 
-    rect = HyperCubeVolume(mode, l)
+    rect = create_hypercube(mode, l)
     intvol = IntegrationVolume(dataset, rect, false)
     pt = intvol.pointcloud.points
 
@@ -145,12 +145,12 @@ function find_density_test_cube(
             last_change = 1
         end
 
-        HyperCubeVolume!(rect, mode, l)
-        IntegrationVolume!(intvol, dataset, rect, false)
+        modify_hypercube!(rect, mode, l)
+        modify_integrationvolume!(intvol, dataset, rect, false)
         pt = intvol.pointcloud.points
     end
 
-    @log_msg LOG_TRACE "Tolerance Test Cube: Iterations $iterations\tPoints: $(intvol.pointcloud.points)\ttarget Points: $points"
+    #@log_msg LOG_TRACE "Tolerance Test Cube: Iterations $iterations\tPoints: $(intvol.pointcloud.points)\ttarget Points: $points"
 
     l, intvol
 end

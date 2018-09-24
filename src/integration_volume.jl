@@ -21,11 +21,11 @@ end
 
 
 """
-    IntegrationVolume!(intvol::IntegrationVolume{T, I}, dataset::DataSet{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)
+    modify_integrationvolume!(intvol::IntegrationVolume{T, I}, dataset::DataSet{T, I}, spvol::HyperRectVolume{T}, searchpts::Bool = true)
 
 updates an integration volume with new boundaries. Recalculates the pointcloud and volume.
 """
-function IntegrationVolume!(
+function modify_integrationvolume!(
     intvol::IntegrationVolume{T, I},
     dataset::DataSet{T, I},
     spvol::HyperRectVolume{T},
@@ -83,7 +83,7 @@ function update!(
     volume.pointcloud.probfactor = exp(volume.pointcloud.maxLogProb - volume.pointcloud.minLogProb)
     volume.pointcloud.probweightfactor = exp(volume.pointcloud.maxWeightProb - volume.pointcloud.minWeightProb)
 
-    @log_msg LOG_DEBUG "Hyperrectangle updated. Points:\t$(volume.pointcloud.points)\tVolume:\t$(volume.volume)\tProb. Factor:\t$(volume.pointcloud.probfactor)"
+    #@debug "Hyperrectangle updated. Points:\t$(volume.pointcloud.points)\tVolume:\t$(volume.volume)\tProb. Factor:\t$(volume.pointcloud.probfactor)"
     nothing
 end
 
@@ -104,7 +104,7 @@ function _update!(
     if searchpts && searchres.points > 0
         start = addpts ? length(volume.pointcloud.pointIDs) + 1 : 1
         resize!(volume.pointcloud.pointIDs, volume.pointcloud.points)
-        copy!(volume.pointcloud.pointIDs, start, searchres.pointIDs, 1)
+        copyto!(volume.pointcloud.pointIDs, start, searchres.pointIDs, 1)
     end
 
     nothing
@@ -151,7 +151,7 @@ function resize_integrationvol!(
             searchVol.lo[changed_dim] = newrect.hi[changed_dim]
         else
             #check if pts inside vol are corrected
-            @log_msg LOG_ERROR "resize_integrationvol(): Volume $original didn't change.", searchVol.lo[changed_dim], "\n", searchVol.hi[changed_dim], "\n", original.spatialvolume.lo[changed_dim], "\n", original.spatialvolume.hi[changed_dim]
+            @error "resize_integrationvol(): Volume $original didn't change.", searchVol.lo[changed_dim], "\n", searchVol.hi[changed_dim], "\n", original.spatialvolume.lo[changed_dim], "\n", original.spatialvolume.hi[changed_dim]
         end
     end
 
@@ -173,7 +173,7 @@ function resize_integrationvol!(
         if searchpts
             newids = search(dataset, newrect, searchpts).pointIDs
             resize!(result.pointcloud.pointIDs, result.pointcloud.points)
-            copy!(result.pointcloud.pointIDs, newids)
+            copyto!(result.pointcloud.pointIDs, newids)
         end
     end
 
@@ -206,9 +206,9 @@ function Base.copy!(
 
     p = ndims(src)
     resize!(target.lo, p)
-    copy!(target.lo, src.lo)
+    copyto!(target.lo, src.lo)
     resize!(src.hi, p)
-    copy!(target.hi, src.hi)
+    copyto!(target.hi, src.hi)
 
     nothing
 end

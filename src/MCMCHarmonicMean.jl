@@ -7,34 +7,34 @@ module MCMCHarmonicMean
 
 using ProgressMeter
 using Distributions
-#using HDF5
 using StatsBase
-
-using BAT
-using BAT.Logging
-@enable_logging
-set_log_level!(MCMCHarmonicMean, LOG_INFO)
-
-
+using LinearAlgebra
+using ParallelProcessingTools
 using Base.Threads
-using MultiThreadingTools
-using StatsBase
 using ElasticArrays
 using DataStructures
 
-include("./DataTypes.jl")
-include("./DataTree.jl")
+include("bat_dependencies.jl")
+#using BAT
+#using BAT.Logging
+#@enable_logging
+#set_log_level!(MCMCHarmonicMean, LOG_INFO)
+
+using Base.CoreLogging
+
+
+include("./data_types.jl")
+include("./data_tree.jl")
 
 include("./util.jl")
 
-include("./PointCloud.jl")
-include("./IntegrationVolume.jl")
-#include("./ImportData.jl")
+include("./point_cloud.jl")
+include("./integration_volume.jl")
 
 
-include("./Hyperrectangle.jl")
-include("./WhiteningTransformation.jl")
-include("./HarmonicMeanIntegration.jl")
+include("./hyper_rectangle.jl")
+include("./whitening_transformation.jl")
+include("./harmonic_mean_integration.jl")
 
 include("./uncertainty.jl")
 
@@ -54,7 +54,7 @@ export split_dataset
 
 export DataSet
 export WhiteningResult
-export SearchTree, DataTree
+export SpacePartitioningTree
 export IntermediateResult
 
 export HMIPrecisionSettings

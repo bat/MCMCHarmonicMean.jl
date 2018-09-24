@@ -31,7 +31,7 @@ function PointCloud!(
     cloud.points = cloud.searchres.points
 
     resize!(cloud.pointIDs, cloud.points)
-    copy!(cloud.pointIDs, cloud.searchres.pointIDs)
+    copyto!(cloud.pointIDs, cloud.searchres.pointIDs)
 
     cloud.maxWeightProb = cloud.searchres.maxWeightProb
     cloud.minWeightProb = cloud.searchres.minWeightProb
@@ -67,7 +67,7 @@ function Base.copy!(
     target.points = src.points
 
     resize!(target.pointIDs, length(src.pointIDs))
-    copy!(target.pointIDs, src.pointIDs)
+    copyto!(target.pointIDs, src.pointIDs)
 
     target.maxLogProb = src.maxLogProb
     target.minLogProb = src.minLogProb

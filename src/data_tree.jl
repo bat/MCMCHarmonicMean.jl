@@ -1,26 +1,12 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
 
-mutable struct DataTree{
-    T<:AbstractFloat,
-    I<:Integer} <: SearchTree
-
-    cuts::I
-    leafsize::I
-
-    dimensionlist::Vector{I}
-    recursiondepth::I
-    cutlist::Vector{T}
-end
-DataTree(T::DataType, I::DataType) = DataTree{T, I}(zero(I), zero(I), Vector{I}(0), zero(I), Vector{I}(0))
-isinitialized(x::DataTree) = !(iszero(x.cuts) && iszero(x.leafsize) && isempty(x.dimensionlist) && iszero(x.recursiondepth) && isempty(x.cutlist))
-
 
 function create_search_tree(
     dataset::DataSet{T, I},
     progressbar::Progress;
     mincuts::I = 8,
-    maxleafsize::I = 200)::DataTree{T, I} where {T<:AbstractFloat, I<:Integer}
+    maxleafsize::I = 200)::SpacePartitioningTree{T, I} where {T<:AbstractFloat, I<:Integer}
 
     sugg_cuts = (dataset.N / maxleafsize) ^ (1 / dataset.P)
     cuts = ceil(I, max(mincuts, sugg_cuts))
@@ -35,14 +21,14 @@ function create_search_tree(
     end
 
     leafsize = ceil(I, dataset.N / cuts^recdepth)
-    @log_msg LOG_DEBUG "cuts $cuts\tleafsize $leafsize\tRec. Depth $recdepth"
-    cutlist = Vector{T}(0)
+    @debug "cuts $cuts\tleafsize $leafsize\tRec. Depth $recdepth"
+    cutlist = zeros(T, 0)
 
     if recdepth > 0
         createleafs(dataset, progressbar, dimensionlist, cutlist, cuts, leafsize, 1)
     end
 
-    dataset.partitioningtree = DataTree(cuts, leafsize, dimensionlist, length(dimensionlist), cutlist)
+    dataset.partitioningtree = SpacePartitioningTree(cuts, leafsize, dimensionlist, length(dimensionlist), cutlist)
 end
 
 function createleafs(
@@ -67,10 +53,10 @@ function createleafs(
 
     sortID = sortperm(dataset.data[dimensionlist[1], startInt:stopInt])
 
-    dataset.data[:, startInt:stopInt] = dataset.data[:, sortID+startInt-1]
-    dataset.logprob[startInt:stopInt] = dataset.logprob[sortID+startInt-1]
-    dataset.weights[startInt:stopInt] = dataset.weights[sortID+startInt-1]
-    dataset.ids[startInt:stopInt] =     dataset.ids[sortID+startInt-1]
+    dataset.data[:, startInt:stopInt] = dataset.data[:, sortID.+startInt.-1]
+    dataset.logprob[startInt:stopInt] = dataset.logprob[sortID.+startInt.-1]
+    dataset.weights[startInt:stopInt] = dataset.weights[sortID.+startInt.-1]
+    dataset.ids[startInt:stopInt] =     dataset.ids[sortID.+startInt.-1]
 
     @assert remainingRec >= 1
     start::I = 0
@@ -124,7 +110,7 @@ function search!(
 
     currentRecursion::I = 0
     currentDimension::I = 0
-    treePos = Vector{I}(0)
+    treePos = zeros(I, 0)
 
     maxRecursion::I = dataset.partitioningtree.recursiondepth
     maxI::I = length(dataset.partitioningtree.cutlist)

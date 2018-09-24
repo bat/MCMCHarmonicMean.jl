@@ -1,6 +1,19 @@
 # This file is a part of MCMCHarmonicMean.jl, licensed under the MIT License (MIT).
 
-abstract type SearchTree end
+mutable struct SpacePartitioningTree{
+    T<:AbstractFloat,
+    I<:Integer}
+
+    cuts::I
+    leafsize::I
+
+    dimensionlist::Vector{I}
+    recursiondepth::I
+    cutlist::Vector{T}
+end
+SpacePartitioningTree(T::DataType, I::DataType) = SpacePartitioningTree{T, I}(zero(I), zero(I), zeros(I, 0), zero(I), zeros(I, 0))
+isinitialized(x::SpacePartitioningTree) = !(iszero(x.cuts) && iszero(x.leafsize) && isempty(x.dimensionlist) && iszero(x.recursiondepth) && isempty(x.cutlist))
+
 
 """
     DataSet{T<:AbstractFloat, I<:Integer}
@@ -24,30 +37,11 @@ mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     subsetsize::T
     iswhitened::Bool
     isnew::Bool
-    partitioningtree::SearchTree
+    partitioningtree::SpacePartitioningTree
     startingIDs::Array{I, 1}
     tolerance::T
 end
 
-function DataSet(
-    data::Tuple{DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}}, MCMCSampleIDVector, MCMCBasicStats},
-    nsubsets::Int64 = 0,
-    subsetsize::T = zero(T)
-    )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
-
-    DataSet(data..., nsubsets, subsetsize)
-end
-
-function DataSet(
-    samples::DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}},
-    sampleIDs::MCMCSampleIDVector,
-    mcmcstats::MCMCBasicStats,
-    nsubsets::Int64 = 0,
-    subsetsize::T = zero(T)
-    )::DataSet{T, I} where {T<:AbstractFloat, I<:Integer}
-
-    DataSet(convert(Array{T, 2}, samples.params), samples.log_value, samples.weight, nsubsets, subsetsize)
-end
 
 function DataSet(
     data:: Array{T, 2},
@@ -98,7 +92,7 @@ function DataSet(
         end
     end
 
-    DataSet(data, logprob, weights, ids, N, P, nsubsets, subsetsize, false, true, DataTree(T, Int64), Array{Int64, 1}(0), T(0))
+    DataSet(data, logprob, weights, ids, N, P, nsubsets, subsetsize, false, true, SpacePartitioningTree(T, Int64), zeros(Int64, 0), T(0))
 end
 
 Base.show(io::IO, data::DataSet) = print(io, "DataSet: $(data.N) samples, $(data.P) parameters")
@@ -150,14 +144,14 @@ struct WhiteningResult{T<:AbstractFloat}
     whiteningmatrix::Matrix{T}
     meanvalue::Vector{T}
 end
-WhiteningResult(T::DataType) = WhiteningResult(zero(T), zero(T), Matrix{T}(0, 0), Vector{T}(0))
+WhiteningResult(T::DataType) = WhiteningResult(zero(T), zero(T), zeros(T, 0, 0), zeros(T, 0))
 Base.show(io::IO, wres::WhiteningResult) = print(io, "Whitening Result: Determinant: $(wres.determinant), Target Prob. Factor: $(wres.targetprobfactor)")
 isinitialized(x::WhiteningResult) = !(iszero(x.determinant) && iszero(x.targetprobfactor) && isempty(x.whiteningmatrix) && isempty(x.meanvalue))
 
 """
     SearchResult{T<:AbstractFloat, I<:Integer}
 
-Stores the results of the search tree's search function
+Stores the results of the space partitioning tree's search function
 # Variables
 - 'pointIDs::Vector{I}' : the IDs of the points found, might be empty because it is optional
 - 'points::I' : The number of points found.
@@ -178,7 +172,7 @@ end
 function SearchResult(T::DataType, I::DataType)
     @assert T<:AbstractFloat
     @assert I<:Integer
-    return SearchResult{T, I}(Vector{I}(0), I(0), T(0), T(0), T(0), T(0))
+    return SearchResult{T, I}(zeros(I, 0), I(0), T(0), T(0), T(0), T(0))
 end
 Base.show(io::IO, sres::SearchResult) = print(io, "Search Result: Points: $(sres.points), Max. Log. Prob.: $(sres.maxLogProb), Min. Log. Prob.: $(sres.minLogProb)")
 
@@ -208,7 +202,7 @@ mutable struct PointCloud{T<:AbstractFloat, I<:Integer}
     pointIDs::Vector{I}
     searchres::SearchResult{T, I}
 end
-PointCloud(T::DataType, I::DataType) = PointCloud(T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), T(0.0), I(0), Vector{I}(0), SearchResult(T, I))
+PointCloud(T::DataType, I::DataType) = PointCloud(zero(T), zero(T), zero(T), zero(T), zero(T), zero(T), zero(I), zeros(I, 0), SearchResult(T, I))
 Base.show(io::IO, cloud::PointCloud) = print(io, "Point Cloud with $(cloud.points) points, probability factor: $(cloud.probfactor)")
 
 
@@ -236,7 +230,7 @@ mutable struct IntermediateResults{T<:AbstractFloat}
     volumeID::Array{Int64, 1}
     Y::Array{T, 2}
 end
-IntermediateResults(T::DataType, n::Int64) = IntermediateResults(zeros(T, n), [Int64(i) for i=1:n], Array{T,2}(0,0))
+IntermediateResults(T::DataType, n::Int64) = IntermediateResults(zeros(T, n), [Int64(i) for i=1:n], zeros(T, 0, 0))
 Base.length(x::IntermediateResults) = length(x.integrals)
 
 mutable struct HMIEstimate{T<:AbstractFloat}
@@ -244,13 +238,13 @@ mutable struct HMIEstimate{T<:AbstractFloat}
     uncertainty::T
     weights::Array{T, 1}
 end
-HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), Array{T, 1}(0))
+HMIEstimate(T::DataType) = HMIEstimate(zero(T), zero(T), zeros(T, 0))
 function HMIEstimate(a::HMIEstimate{T}, b::HMIEstimate{T})::HMIEstimate{T} where {T<:AbstractFloat}
     val = mean([a.estimate, b.estimate], AnalyticWeights([1 / a.uncertainty^2, 1 / b.uncertainty^2]))
     unc = 1 / sqrt(1 / a.uncertainty^2 + 1 / b.uncertainty^2)
     HMIEstimate(val, unc, [a.weights..., b.weights...])
 end
-Base.show(io::IO, ires::HMIEstimate) = print(io, "$(signif(ires.estimate, 6))  +-  $(signif(ires.uncertainty, 6))")
+Base.show(io::IO, ires::HMIEstimate) = print(io, "$(round(ires.estimate, sigdigits=6))  +-  $(round(ires.uncertainty, sigdigits=6))")
 
 
 mutable struct HMIResult{T<:AbstractFloat}
@@ -302,12 +296,12 @@ function HMIData(
         dataset1,
         dataset2,
         WhiteningResult(T),
-        Vector{IntegrationVolume{T, I}}(0),
-        Vector{IntegrationVolume{T, I}}(0),
-        Vector{HyperRectVolume{T}}(0),
-        Vector{HyperRectVolume{T}}(0),
-        Vector{I}(0),
-        Vector{I}(0),
+        Vector{IntegrationVolume{T, I}}(undef, 0),
+        Vector{IntegrationVolume{T, I}}(undef, 0),
+        Vector{HyperRectVolume{T}}(undef, 0),
+        Vector{HyperRectVolume{T}}(undef, 0),
+        zeros(I, 0),
+        zeros(I, 0),
         IntermediateResults(T, 0),
         IntermediateResults(T, 0),
         Dict{String, HMIResult}()
@@ -318,28 +312,15 @@ function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat,
     HMIData(split_dataset(dataset)...)
 end
 
-function HMIData(
-    data::Tuple{DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}}, MCMCSampleIDVector, MCMCBasicStats})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
-
-    HMIData(data...)
-end
-
-function HMIData(
-    samples::DensitySampleVector{T, T, I, ElasticArray{T, 2,1}, Array{T, 1},Array{I ,1}},
-    sampleIDs::MCMCSampleIDVector,
-    mcmcstats::MCMCBasicStats)::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
-
-    HMIData(split_samples(samples, sampleIDs, mcmcstats)...)
-end
 
 function Base.show(io::IO, ires::HMIData)
     output = "Data Set 1: $(length(ires.volumelist1)) Volumes, Data Set 2: $(length(ires.volumelist2)) Volumes"
 
-    if haskey(ires.integralestimates, "legacy result")
-        output *= "\n\tLegacy Integral Estimate Combination:\t $(ires.integralestimates["legacy result"].final)"
-    end
+    #if haskey(ires.integralestimates, "legacy result")
+    #    output *= "\n\tLegacy Integral Estimate Combination:\t $(ires.integralestimates["legacy result"].final)"
+    #end
     if haskey(ires.integralestimates, "cov. weighted result")
-        output *= "\n\tCorrelation & Covariance Combination:\t $(ires.integralestimates["cov. weighted result"].final)"
+        output *= "\n\tIntegral Estimate:\t $(ires.integralestimates["cov. weighted result"].final)"
     end
 
     println(io, output)

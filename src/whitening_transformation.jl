@@ -24,9 +24,11 @@ function cholesky_whitening(
         setindex!(dataset.data, buffer, :, n)
     end
 
-    covmatrix = cov(transpose(dataset.data), FrequencyWeights(dataset.weights), corrected=true)
-    covmatrix_inv = inv(Symmetric(covmatrix))
-    w = chol(covmatrix_inv)
+    #cov of a Transpose object yields the wrong (0.0) result in 1D, if all weights are equal (e.g. direct sampling)!
+    covmatrix = cov(convert(typeof(dataset.data), transpose(dataset.data)), FrequencyWeights(dataset.weights), corrected=true)
+    symcovmatrix = Symmetric(covmatrix)
+    covmatrix_inv = inv(symcovmatrix)
+    w = cholesky(covmatrix_inv).U
     wres = convert(Matrix{T}, w)
 
     transform_data(dataset, wres, datamean)
@@ -66,7 +68,7 @@ function transform_data(
         dataset.data .-= datamean
     end
 
-    if W == eye(T, dataset.P)
+    if diag(W) == ones(T, dataset.P)
         determinant = 1.0
     else
         dataset.data = W * dataset.data
@@ -74,13 +76,13 @@ function transform_data(
         determinant = abs(det(W))
     end
 
-    maxP::T = select(dataset.logprob, dataset.N)
-    suggTargetProb::T = exp(maxP - select(dataset.logprob, floor(Int64, dataset.N * 0.2)))
+    maxP::T = maximum(dataset.logprob)
+    suggTargetProb::T = exp(maxP - partialsort(dataset.logprob, floor(Int64, dataset.N * 0.2)))
 
     dataset.iswhitened = true
 
-    @log_msg LOG_DEBUG "Determinant:\t" * string(determinant)
-    @log_msg LOG_DEBUG "Suggested Target Probability Factor:\t" * string(suggTargetProb)
+    @debug "Determinant:\t" * string(determinant)
+    @debug "Suggested Target Probability Factor:\t" * string(suggTargetProb)
 
     WhiteningResult(determinant, suggTargetProb, W, datamean)
 end
