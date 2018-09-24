@@ -1,6 +1,6 @@
 function hm_create_integrationvolumes(
-    result::HMIData{T, I, V},
-    settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+    result::HMIData{T, I, HyperRectVolume{T}},
+    settings::HMISettings) where {T<:AbstractFloat, I<:Integer}
 
     if isempty(result.volumelist1) || isempty(result.volumelist2)
         nvols = (isempty(result.volumelist1) ? length(result.dataset1.startingIDs) : 0) +
@@ -32,7 +32,7 @@ end
 
 function hm_create_integrationvolumes_dataset(
     dataset::DataSet{T, I},
-    volumes::Array{IntegrationVolume{T, I}, 1},
+    volumes::Array{IntegrationVolume{T, I, HyperRectVolume{T}}, 1},
     cubes::Array{HyperRectVolume{T}, 1},
     targetprobfactor::T,
     progressbar::Progress,
@@ -42,7 +42,7 @@ function hm_create_integrationvolumes_dataset(
     maxPoints::I = 0
     totalpoints::I = 0
 
-    thread_volumes = Vector{IntegrationVolume{T, I}}(undef, length(dataset.startingIDs))
+    thread_volumes = Vector{IntegrationVolume{T, I, HyperRectVolume{T}}}(undef, length(dataset.startingIDs))
     thread_cubes = Vector{HyperRectVolume{T}}(undef, length(dataset.startingIDs))
 
     atomic_centerID = Atomic{I}(1)
@@ -64,7 +64,7 @@ end
 
 function hm_update_integrationvolumes_dataset(
     dataset::DataSet{T, I},
-    volumes::Array{IntegrationVolume{T, I}, 1},
+    volumes::Array{IntegrationVolume{T, I, HyperRectVolume{T}}, 1},
     progressbar::Progress) where {T<:AbstractFloat, I<:Integer}
 
     maxPoints = zero(T)
@@ -90,20 +90,6 @@ function hm_update_integrationvolumes_dataset(
     dataset.isnew = false
 end
 
-function hm_integrate_integrationvolumes(
-    result::HMIData{T, I, V},
-    settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
-
-    nRes = length(result.volumelist1) + length(result.volumelist2)
-    @info "Integrating $nRes Hyperrectangles"
-
-    progressbar = Progress(nRes)
-
-    result.integrals1, result.rejectedrects1 = hm_integrate_integrationvolumes_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
-    result.integrals2, result.rejectedrects2 = hm_integrate_integrationvolumes_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
-
-    finish!(progressbar)
-end
 
 """
 This function assigns each thread its own hyper-rectangle to build, if in multithreading-mode.
@@ -112,7 +98,7 @@ function hyperrectangle_creationproccess!(
     dataset::DataSet{T, I},
     targetprobfactor::T,
     settings::HMISettings,
-    integrationvolumes::Vector{IntegrationVolume{T, I}},
+    integrationvolumes::Vector{IntegrationVolume{T, I, HyperRectVolume{T}}},
     cubevolumes::Vector{HyperRectVolume{T}},
     atomic_centerID::Atomic{I},
     progressbar::Progress) where {T<:AbstractFloat, I<:Integer}
@@ -147,7 +133,7 @@ function create_hyperrectangle(
     id::I,
     dataset::DataSet{T, I},
     targetprobfactor::T,
-    settings::HMISettings)::Tuple{IntegrationVolume{T, I}, HyperRectVolume{T}} where {T<:AbstractFloat, I<:Integer}
+    settings::HMISettings)::Tuple{IntegrationVolume{T, I, HyperRectVolume{T}}, HyperRectVolume{T}} where {T<:AbstractFloat, I<:Integer}
 
     edgelength::T = 1.0
 
@@ -378,31 +364,4 @@ end
     else
         return Step * 2.0
     end
-end
-
-function hm_integrate_integrationvolumes_dataset(
-    volumes::Array{IntegrationVolume{T, I}},
-    dataset::DataSet{T, I},
-    determinant::T,
-    progressbar::Progress,
-    settings::HMISettings)::Tuple{IntermediateResults{T}, Vector{I}} where {T<:AbstractFloat, I<:Integer}
-
-    if length(volumes) < 1
-        @error "No hyper-rectangles could be created. Try integration with more points or different settings."
-    end
-
-    integralestimates = IntermediateResults(T, length(volumes))
-    integralestimates.Y = zeros(T, dataset.nsubsets, length(volumes))
-
-    @mt for i in threadpartition(eachindex(volumes), mt_nthreads())
-        integralestimates.Y[:, i], integralestimates.integrals[i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
-
-        lock(_global_lock) do
-            next!(progressbar)
-        end
-    end
-
-    rejectedids = trim(integralestimates, settings.dotrimming)
-
-    return integralestimates, rejectedids
 end

@@ -3,8 +3,8 @@
 
 function calculate_overlap(
     dataset::DataSet{T, I},
-    volumes::Array{IntegrationVolume{T, I}, 1},
-    integralestimates::IntermediateResults)::Array{T, 2} where{T<:AbstractFloat, I<:Integer}
+    volumes::Array{IntegrationVolume{T, I, V}, 1},
+    integralestimates::IntermediateResults)::Array{T, 2} where{T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
 
     M = length(integralestimates)

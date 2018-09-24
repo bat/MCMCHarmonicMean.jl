@@ -46,8 +46,8 @@ end
 
 function create_pointweights(
     dataset::DataSet{T, I},
-    volumes::Vector{IntegrationVolume{T, I}},
-    ids::Array{I})::Vector{T} where {T<:AbstractFloat, I<:Integer}
+    volumes::Vector{IntegrationVolume{T, I, V}},
+    ids::Array{I})::Vector{T} where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     pweights = zeros(T, dataset.N)
 

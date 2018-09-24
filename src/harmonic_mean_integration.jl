@@ -181,7 +181,7 @@ end
 function hm_combineresults_legacy_dataset(
     dataset::DataSet{T, I},
     integralestimates::IntermediateResults{T},
-    volumes::Array{IntegrationVolume{T, I}, 1}) where {T<:AbstractFloat, I<:Integer}
+    volumes::Array{IntegrationVolume{T, I, V}, 1}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     dat = Dict{String, Any}()
 
@@ -219,7 +219,7 @@ end
 function hm_combineresults_covweighted_dataset(
     dataset::DataSet{T, I},
     integralestimates::IntermediateResults{T},
-    volumes::Array{IntegrationVolume{T, I}, 1}) where {T<:AbstractFloat, I<:Integer}
+    volumes::Array{IntegrationVolume{T, I, V}, 1}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     dat = Dict{String, Any}()
     dat["Σ"] = Σ = cov(integralestimates.Y) ./ dataset.nsubsets
@@ -303,10 +303,55 @@ function findtolerance(
 end
 
 
+function hm_integrate_integrationvolumes(
+    result::HMIData{T, I, V},
+    settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+
+    nRes = length(result.volumelist1) + length(result.volumelist2)
+    @info "Integrating $nRes Hyperrectangles"
+
+    progressbar = Progress(nRes)
+
+    result.integrals1, result.rejectedrects1 = hm_integrate_integrationvolumes_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals2, result.rejectedrects2 = hm_integrate_integrationvolumes_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
+
+    finish!(progressbar)
+end
+
+
+function hm_integrate_integrationvolumes_dataset(
+    volumes::Array{IntegrationVolume{T, I, V}},
+    dataset::DataSet{T, I},
+    determinant::T,
+    progressbar::Progress,
+    settings::HMISettings)::Tuple{IntermediateResults{T}, Vector{I}} where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+
+    if length(volumes) < 1
+        @error "No hyper-rectangles could be created. Try integration with more points or different settings."
+    end
+
+    integralestimates = IntermediateResults(T, length(volumes))
+    integralestimates.Y = zeros(T, dataset.nsubsets, length(volumes))
+
+    @mt for i in threadpartition(eachindex(volumes), mt_nthreads())
+        integralestimates.Y[:, i], integralestimates.integrals[i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
+
+        lock(_global_lock) do
+            next!(progressbar)
+        end
+    end
+
+    rejectedids = trim(integralestimates, settings.dotrimming)
+
+    return integralestimates, rejectedids
+end
+
+
+
 function integrate_hyperrectangle_cov(
     dataset::DataSet{T, I},
-    integrationvol::IntegrationVolume{T, I},
-    determinant::T)::Tuple{Array{T, 1}, T} where {T<:AbstractFloat, I<:Integer}
+    integrationvol::IntegrationVolume{T, I, V},
+    determinant::T)::Tuple{Array{T, 1}, T} where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     norm_const = zeros(T, dataset.nsubsets)
     totalWeights = zeros(T, dataset.nsubsets)

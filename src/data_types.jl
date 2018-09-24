@@ -282,8 +282,8 @@ mutable struct HMIData{T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     dataset1::DataSet{T, I}
     dataset2::DataSet{T, I}
     whiteningresult::WhiteningResult{T}
-    volumelist1::Vector{IntegrationVolume{T, I}}
-    volumelist2::Vector{IntegrationVolume{T, I}}
+    volumelist1::Vector{IntegrationVolume{T, I, V}}
+    volumelist2::Vector{IntegrationVolume{T, I, V}}
     cubelist1::Vector{V}
     cubelist2::Vector{V}
     rejectedrects1::Vector{I}
@@ -296,14 +296,14 @@ end
 function HMIData(
     dataset1::DataSet{T, I},
     dataset2::DataSet{T, I},
-    dataType::DataType = HyperRectVolume{T})::HMIData{T, I} where {T<:AbstractFloat, I<:Integer}
+    dataType::DataType = HyperRectVolume{T})::HMIData where {T<:AbstractFloat, I<:Integer}
 
     HMIData(
         dataset1,
         dataset2,
         WhiteningResult(T),
-        Vector{IntegrationVolume{T, I}}(undef, 0),
-        Vector{IntegrationVolume{T, I}}(undef, 0),
+        Vector{IntegrationVolume{T, I, dataType}}(undef, 0),
+        Vector{IntegrationVolume{T, I, dataType}}(undef, 0),
         Vector{dataType}(undef, 0),
         Vector{dataType}(undef, 0),
         zeros(I, 0),
