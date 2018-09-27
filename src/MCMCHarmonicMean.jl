@@ -14,6 +14,7 @@ using Base.Threads
 using ElasticArrays
 using DataStructures
 using RecipesBase
+using LaTeXStrings
 
 include("spatial_volume.jl")
 #using BAT
@@ -42,14 +43,14 @@ include("uncertainty.jl")
 #include("plotting_recipes.jl")
 
 export hm_init
-export hm_whiteningtransformation
-export hm_createpartitioningtree
-export hm_findstartingsamples
-export hm_determinetolerance
-export hm_hyperrectanglecreation
-export hm_integratehyperrectangles
+export hm_whiteningtransformation!
+export hm_createpartitioningtree!
+export hm_findstartingsamples!
+export hm_determinetolerance!
+export hm_hyperrectanglecreation!
+export hm_integratehyperrectangles!
 
-export hm_integrate
+export hm_integrate!
 
 export split_samples
 export split_dataset

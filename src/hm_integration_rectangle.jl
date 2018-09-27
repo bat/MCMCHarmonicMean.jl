@@ -1,4 +1,4 @@
-function hm_create_integrationvolumes(
+function hm_create_integrationvolumes!(
     result::HMIData{T, I, HyperRectVolume{T}},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer}
 
@@ -9,28 +9,30 @@ function hm_create_integrationvolumes(
         @info "Create $nvols Hyperrectangles using $(_global_mt_setting ? nthreads() : 1) thread(s)"
         progressbar = Progress(nvols)
 
-        isempty(result.volumelist1) && hm_create_integrationvolumes_dataset(result.dataset1, result.volumelist1, result.cubelist1, result.whiteningresult.targetprobfactor, progressbar, settings)
-        isempty(result.volumelist2) && hm_create_integrationvolumes_dataset(result.dataset2, result.volumelist2, result.cubelist2, result.whiteningresult.targetprobfactor, progressbar, settings)
+        isempty(result.volumelist1) && hm_create_integrationvolumes_dataset!(
+            result.dataset1, result.volumelist1, result.cubelist1, result.whiteningresult.targetprobfactor, progressbar, settings)
+        isempty(result.volumelist2) && hm_create_integrationvolumes_dataset!(
+            result.dataset2, result.volumelist2, result.cubelist2, result.whiteningresult.targetprobfactor, progressbar, settings)
 
         finish!(progressbar)
     end
 
 
-    if result.dataset1.isnew || result.dataset2.isnew
-        nvols = (result.dataset1.isnew ? length(result.volumelist1) : 0) +
-                (result.dataset2.isnew ? length(result.volumelist2) : 0)
+    nvols = (result.dataset1.isnew ? length(result.volumelist1) : 0) +
+            (result.dataset2.isnew ? length(result.volumelist2) : 0)
 
+    if nvols > 0
         @info "Updating $nvols Hyperrectangles of Data Set 1 using $(_global_mt_setting ? nthreads() : 1) thread(s)"
         progressbar = Progress(nvols)
 
-        result.dataset2.isnew && hm_update_integrationvolumes_dataset(result.dataset2, result.volumelist1, progressbar)
-        result.dataset1.isnew && hm_update_integrationvolumes_dataset(result.dataset1, result.volumelist2, progressbar)
+        result.dataset2.isnew && hm_update_integrationvolumes_dataset!(result.dataset2, result.volumelist1, progressbar)
+        result.dataset1.isnew && hm_update_integrationvolumes_dataset!(result.dataset1, result.volumelist2, progressbar)
 
         finish!(progressbar)
     end
 end
 
-function hm_create_integrationvolumes_dataset(
+function hm_create_integrationvolumes_dataset!(
     dataset::DataSet{T, I},
     volumes::Array{IntegrationVolume{T, I, HyperRectVolume{T}}, 1},
     cubes::Array{HyperRectVolume{T}, 1},
@@ -62,7 +64,7 @@ function hm_create_integrationvolumes_dataset(
     dataset.isnew = true
 end
 
-function hm_update_integrationvolumes_dataset(
+function hm_update_integrationvolumes_dataset!(
     dataset::DataSet{T, I},
     volumes::Array{IntegrationVolume{T, I, HyperRectVolume{T}}, 1},
     progressbar::Progress) where {T<:AbstractFloat, I<:Integer}
@@ -79,7 +81,7 @@ function hm_update_integrationvolumes_dataset(
         end
     end
 
-        #remove rectangles with less than 1% points of the largest rectangle (in terms of points)
+    #remove rectangles with less than 1% points of the largest rectangle (in terms of points)
     j = length(volumes)
     for i = 1:length(volumes)
         if volumes[j].pointcloud.points < maxPoints * 0.01 || volumes[j].pointcloud.points < dataset.P * 4

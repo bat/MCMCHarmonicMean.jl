@@ -116,7 +116,7 @@ HMIPrecisionSettings()
 end
 """
 mutable struct HMISettings
-    whitening_function::Function
+    whitening_function!::Function
     max_startingIDs::Integer
     max_startingIDs_fraction::AbstractFloat
     rect_increase::AbstractFloat
@@ -124,9 +124,9 @@ mutable struct HMISettings
     warning_minstartingids::Integer
     dotrimming::Bool
 end
-HMIFastSettings() =      return HMISettings(cholesky_whitening, 100,   0.1, 0.1, true, 16, true)
-HMIStandardSettings() =  return HMISettings(cholesky_whitening, 1000,  0.5, 0.1, true, 16, true)
-HMIPrecisionSettings() = return HMISettings(cholesky_whitening, 10000, 2.5, 0.1, true, 16, true)
+HMIFastSettings() =      return HMISettings(cholesky_whitening!, 100,   0.1, 0.1, true, 16, true)
+HMIStandardSettings() =  return HMISettings(cholesky_whitening!, 1000,  0.5, 0.1, true, 16, true)
+HMIPrecisionSettings() = return HMISettings(cholesky_whitening!, 10000, 2.5, 0.1, true, 16, true)
 
 """
     WhiteningResult{T<:AbstractFloat}

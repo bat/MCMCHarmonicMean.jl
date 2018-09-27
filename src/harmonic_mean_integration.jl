@@ -21,7 +21,7 @@ end
 function mt_nthreads()
     _global_mt_setting ? nthreads() : 1
 end
-
+const _minpoints_per_dimension = 50
 
 
 """
@@ -32,39 +32,42 @@ function hm_integrate(
 This function starts the adaptive harmonic mean integration program.
 It needs a HMIData struct as input, which can be either filled using BAT.jl samples or by using a DataSet for custom samples. (see DataSet documentation).
 """
-function hm_integrate(
+function hm_integrate!(
     result::HMIData{T, I, V},
     integrationvol::Symbol = :HyperRectangle;
     settings::HMISettings = HMIPrecisionSettings())::HMIData{T, I, V} where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     hm_init(result, settings)
 
-    hm_whiteningtransformation(result, settings)
+    hm_whiteningtransformation!(result, settings)
 
-    hm_createpartitioningtree(result)
+    hm_createpartitioningtree!(result)
 
-    notsinglemode = hm_findstartingsamples(result, settings)
+    notsinglemode = hm_findseeds!(result, settings)
 
     if !notsinglemode
         result.dataset1.tolerance = Inf
         result.dataset2.tolerance = Inf
         @warn "Tolerance set to Inf for single mode distributions"
     else
-        hm_determinetolerance(result, settings)
+        hm_determinetolerance!(result, settings)
     end
 
-    hm_create_integrationvolumes(result, settings)
-    hm_integrate_integrationvolumes(result, settings)
+    hm_create_integrationvolumes!(result, settings)
+    hm_integrate_integrationvolumes!(result, settings)
 
+    #
+    result.integralestimates["legacy result"] = hm_combineresults_legacy!(result)
 
-    result.integralestimates["legacy result"] = hm_combineresults_legacy(result)
-    result.integralestimates["cov. weighted result"] = hm_combineresults_covweighted(result)
+    #
+    result.integralestimates["cov. weighted result"] = hm_combineresults_covweighted!(result)
+
     return result
 end
 
 
 """
-function hm_init(
+function hm_init!(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
@@ -73,7 +76,7 @@ function hm_init(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
-    if result.dataset1.N < result.dataset1.P * 50 || result.dataset2.N < result.dataset2.P
+    if result.dataset1.N < result.dataset1.P * _minpoints_per_dimension || result.dataset2.N < result.dataset2.P * _minpoints_per_dimension
         @error "Not enough points for integration"
     end
     @assert result.dataset1.P == result.dataset2.P
@@ -84,33 +87,33 @@ function hm_init(
 end
 
 """
-function hm_whiteningtransformation(
+function hm_whiteningtransformation!(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
 Applies a whitening transformation to the samples. A custom whitening method used can be chosen by replacing the default whitening function (Cholesky)
 in the HMISettings struct.
 """
-function hm_whiteningtransformation(
+function hm_whiteningtransformation!(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     if !isinitialized(result.whiteningresult)
         @info "Data Whitening."
-        result.whiteningresult = settings.whitening_function(result.dataset1)
+        result.whiteningresult = settings.whitening_function!(result.dataset1)
     end
 
     if !result.dataset1.iswhitened
         @info "Apply Whitening Transformation to Data Set 1"
-        transform_data(result.dataset1, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue, false)
+        transform_data!(result.dataset1, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue, false)
     end
     if !result.dataset2.iswhitened
         @info "Apply Whitening Transformation to Data Set 2"
-        transform_data(result.dataset2, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue, true)
+        transform_data!(result.dataset2, result.whiteningresult.whiteningmatrix, result.whiteningresult.meanvalue, true)
     end
 end
 
-function hm_createpartitioningtree(
+function hm_createpartitioningtree!(
     result::HMIData{T, I, V}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     maxleafsize = 200
@@ -123,7 +126,7 @@ function hm_createpartitioningtree(
     finish!(progressbar)
 end
 
-function hm_findstartingsamples(
+function hm_findseeds!(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
@@ -144,7 +147,7 @@ function hm_findstartingsamples(
     notsinglemode
 end
 
-function hm_determinetolerance(
+function hm_determinetolerance!(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
@@ -169,16 +172,16 @@ end
 
 
 
-function hm_combineresults_legacy(result::HMIData{T, I, V}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+function hm_combineresults_legacy!(result::HMIData{T, I, V}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     result_legacy = HMIResult(T)
-    result_legacy.result1, result_legacy.dat2 = hm_combineresults_legacy_dataset(result.dataset1, result.integrals2, result.volumelist2)
-    result_legacy.result2, result_legacy.dat2 = hm_combineresults_legacy_dataset(result.dataset2, result.integrals1, result.volumelist1)
+    result_legacy.result1, result_legacy.dat2 = hm_combineresults_legacy_dataset!(result.dataset1, result.integrals2, result.volumelist2)
+    result_legacy.result2, result_legacy.dat2 = hm_combineresults_legacy_dataset!(result.dataset2, result.integrals1, result.volumelist1)
     result_legacy.final = HMIEstimate(result_legacy.result1, result_legacy.result2)
 
     result_legacy
 end
 
-function hm_combineresults_legacy_dataset(
+function hm_combineresults_legacy_dataset!(
     dataset::DataSet{T, I},
     integralestimates::IntermediateResults{T},
     volumes::Array{IntegrationVolume{T, I, V}, 1}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
@@ -205,18 +208,18 @@ function hm_combineresults_legacy_dataset(
     HMIEstimate(i_std, e_std, weights_overlap), dat
 end
 
-function hm_combineresults_covweighted(result::HMIData{T, I, V}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+function hm_combineresults_covweighted!(result::HMIData{T, I, V}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     result_covweighted = HMIResult(T)
-    result_covweighted.result1, result_covweighted.dat1 = hm_combineresults_covweighted_dataset(result.dataset1,
+    result_covweighted.result1, result_covweighted.dat1 = hm_combineresults_covweighted!_dataset(result.dataset1,
         result.integrals2, result.volumelist2)
-    result_covweighted.result2, result_covweighted.dat2 = hm_combineresults_covweighted_dataset(result.dataset2,
+    result_covweighted.result2, result_covweighted.dat2 = hm_combineresults_covweighted!_dataset(result.dataset2,
         result.integrals1, result.volumelist1)
     result_covweighted.final = HMIEstimate(result_covweighted.result1, result_covweighted.result2)
 
     result_covweighted
 end
 
-function hm_combineresults_covweighted_dataset(
+function hm_combineresults_covweighted!_dataset(
     dataset::DataSet{T, I},
     integralestimates::IntermediateResults{T},
     volumes::Array{IntegrationVolume{T, I, V}, 1}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
@@ -260,8 +263,8 @@ function findtolerance(
     ntestpts = [2, 4, 8] * pts
     #@log_msg LOG_TRACE "Tolerance Test Cube Points: $([pts, ntestpts...])"
 
-    vInc = Vector{T}(ntestcubes * (length(ntestpts) + 1))
-    pInc = Vector{T}(ntestcubes * (length(ntestpts) + 1))
+    vInc = zeros(T, ntestcubes * (length(ntestpts) + 1))
+    pInc = zeros(T, ntestcubes * (length(ntestpts) + 1))
 
     startingIDs = dataset.startingIDs
 
@@ -293,17 +296,19 @@ function findtolerance(
     end
 
     #@log_msg LOG_TRACE "Tolerance List: $tols"
-    if length(tols) < 4
+
+    suggTol::T = if length(tols) < 4
         @warn "Tolerance calculation failed. Tolerance is set to default to 1.5"
+        3
+    else
+        (mean(trim(tols)) - 1) * 4 +1
     end
-    suggTol::T = length(tols) < 4 ? 1.5 : mean(trim(tols))
-    suggTol = (suggTol - 1) * 4 + 1
 
     dataset.tolerance = suggTol
 end
 
 
-function hm_integrate_integrationvolumes(
+function hm_integrate_integrationvolumes!(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
@@ -312,14 +317,14 @@ function hm_integrate_integrationvolumes(
 
     progressbar = Progress(nRes)
 
-    result.integrals1, result.rejectedrects1 = hm_integrate_integrationvolumes_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
-    result.integrals2, result.rejectedrects2 = hm_integrate_integrationvolumes_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals1, result.rejectedrects1 = hm_integrate_integrationvolumes!_dataset(result.volumelist1, result.dataset2, result.whiteningresult.determinant, progressbar, settings)
+    result.integrals2, result.rejectedrects2 = hm_integrate_integrationvolumes!_dataset(result.volumelist2, result.dataset1, result.whiteningresult.determinant, progressbar, settings)
 
     finish!(progressbar)
 end
 
 
-function hm_integrate_integrationvolumes_dataset(
+function hm_integrate_integrationvolumes!_dataset(
     volumes::Array{IntegrationVolume{T, I, V}},
     dataset::DataSet{T, I},
     determinant::T,

@@ -4,13 +4,13 @@
 function no_whitening(
     dataset::DataSet{T, I})::WhiteningResult{T} where {T<:AbstractFloat, I<:Integer}
 
-    datamean = Vector{T}(0)
+    datamean = zeros(T, dataset.P)
 
-    transform_data(dataset, eye(T, dataset.P), datamean)
+    transform_data!(dataset, Array{T, 2}(LinearAlgebra.I, dataset.P, dataset.P), datamean)
 end
 
 
-function cholesky_whitening(
+function cholesky_whitening!(
     dataset::DataSet{T, I})::WhiteningResult{T} where {T<:AbstractFloat, I<:Integer}
 
     datamean = zeros(T, dataset.P)
@@ -31,10 +31,10 @@ function cholesky_whitening(
     w = cholesky(covmatrix_inv).U
     wres = convert(Matrix{T}, w)
 
-    transform_data(dataset, wres, datamean)
+    transform_data!(dataset, wres, datamean)
 end
 
-function statistical_whitening(
+function statistical_whitening!(
     dataset::DataSet{T, I})::WhiteningResult{T} where {T<:AbstractFloat, I<:Integer}
 
     datamean = zeros(T, dataset.P)
@@ -53,10 +53,10 @@ function statistical_whitening(
     w = inv(full(sqrt.(D))) * w_d
     wres = convert(Matrix{T}, w)
 
-    transform_data(dataset, wres, datamean)
+    transform_data!(dataset, wres, datamean)
 end
 
-function transform_data(
+function transform_data!(
     dataset::DataSet{T, I},
     W::Matrix{T},
     datamean::Vector{T},
