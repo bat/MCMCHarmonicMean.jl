@@ -15,14 +15,9 @@ using ElasticArrays
 using DataStructures
 using RecipesBase
 using LaTeXStrings
+using Base.CoreLogging
 
 include("spatial_volume.jl")
-#using BAT
-#using BAT.Logging
-#@enable_logging
-#set_log_level!(MCMCHarmonicMean, LOG_INFO)
-
-using Base.CoreLogging
 
 
 include("data_types.jl")
@@ -40,7 +35,7 @@ include("harmonic_mean_integration.jl")
 include("hm_integration_rectangle.jl")
 
 include("uncertainty.jl")
-#include("plotting_recipes.jl")
+include("plot_recipes.jl")
 
 export hm_init
 export hm_whiteningtransformation!
