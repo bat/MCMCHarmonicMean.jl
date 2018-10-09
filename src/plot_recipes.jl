@@ -31,7 +31,8 @@ end
         plot_datasets = 0,
         font_scale = 1.0)
 
-
+    @assert data.dataset1.P == data.dataset2.P
+    @assert data.dataset1.P > 1
 
     #plot both data sets
     if plot_datasets == 0
@@ -189,42 +190,6 @@ end
                 cubes_x[1:end-1], cubes_y[1:end-1]
             end
         end
+
     end
 end
-
-
-#=
-@recipe function f(partitioningtree::SpacePartitioningTree, dim1::Integer = 1, dim2::Integer = 2)
-
-    xcutpos = 1:(1 + partitioningtree.cuts):length(partitioningtree.cutlist)
-    xcuts=partitioningtree.cutlist[xcutpos]
-
-    xlimits=(minimum(dataset.data[1, :]), maximum(dataset.data[1, :]))
-    ylimits=(minimum(dataset.data[2, :]), maximum(dataset.data[2, :]))
-
-    push!(xcuts, xlimits[2])
-
-
-    for i=1:partitioningtree.cuts
-        @series begin
-            seriestype := :path
-            plot!([xcuts[i], xcuts[i]], [ylimits[1], ylimits[2]], color=:blue, linewidth=1.0)
-        end
-
-        ycuts = if i < partitioningtree.cuts
-            [partitioningtree.cutlist[xcutpos[i] + 1:xcutpos[i+1] - 1]..., ylimits[2]]
-        else
-            [partitioningtree.cutlist[xcutpos[i] + 1:length(partitioningtree.cutlist)]..., ylimits[2]]
-        end
-
-        #push!(ycuts, maximum(dataset.data[partitioningtree.leafsize*partitioningtree.cuts*(i - 1)+1:partitioningtree.leafsize*partitioningtree.cuts*(i)]))
-
-
-        for j=1:partitioningtree.cuts
-            plot!([xcuts[i], xcuts[i+1]], [ycuts[j], ycuts[j]], color=:green, linewidth=1.0)
-        end
-        #plot!([xcuts[i], xcuts[i+1]], [ycuts[partitioningtree.cuts + 1], ycuts[partitioningtree.cuts + 1]], color=:green, linewidth=1.0)
-    end
-    plot!([xlimits[2], xlimits[2]], [ylimits[1], ylimits[2]], color=:blue, linewidth=1.0)
-end
-=#

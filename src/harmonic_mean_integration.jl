@@ -56,13 +56,13 @@ function hm_integrate!(
     hm_create_integrationvolumes!(result, settings)
     hm_integrate_integrationvolumes!(result, settings)
 
-    #
+    #see my master thesis for details
     result.integralestimates["legacy result"] = hm_combineresults_legacy!(result)
 
-    #
+    #see arXiv:1808.08051 for details
     result.integralestimates["cov. weighted result"] = hm_combineresults_covweighted!(result)
 
-    return result
+    result
 end
 
 
