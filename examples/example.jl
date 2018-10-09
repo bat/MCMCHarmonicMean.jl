@@ -26,8 +26,8 @@ hm_integrate!(data)
 setting = HMIPrecisionSettings()
 setting.useMultiThreading = false
 setting.max_startingIDs = 32
-settings.whitening_function! = MCMCHarmonicMean.statistical_whitening! #default: cholesky_whitening! alternatively: no_whitening!
-settings.dotrimming = false
+setting.whitening_function! = MCMCHarmonicMean.statistical_whitening! #default: cholesky_whitening! alternatively: no_whitening!
+setting.dotrimming = false
 newdataset = sample_mvnormal(100000)
 #replace data sets
 data.dataset1, data.dataset2 = MCMCHarmonicMean.split_dataset(newdataset)
