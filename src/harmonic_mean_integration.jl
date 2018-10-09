@@ -25,12 +25,11 @@ const _minpoints_per_dimension = 50
 
 
 """
-function hm_integrate(
-    result::HMIData{T, I, V};
-    settings::HMISettings = HMIPrecisionSettings())::HMIData{T, I, V} where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+function hm_integrate!(result, settings = HMIPrecisionSettings())
 
-This function starts the adaptive harmonic mean integration program.
-It needs a HMIData struct as input, which can be either filled using BAT.jl samples or by using a DataSet for custom samples. (see DataSet documentation).
+This function starts the adaptive harmonic mean integration. See arXiv:1808.08051 for more details.
+It needs a HMIData struct as input, which holds the samples, in form of a dataset, the integration volumes and other
+properties, required for the integration, and the final result.
 """
 function hm_integrate!(
     result::HMIData{T, I, V},
@@ -67,17 +66,16 @@ end
 
 
 """
-function hm_init!(
-    result::HMIData{T, I, V},
-    settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+function hm_init!(result, settings)
 
-Correctly sets to global multithreading setting and ensures that a minimum number of samples, when accounting for the number of dimensions, are provided."""
+Sets the global multithreading setting and ensures that a minimum number of samples, dependent on the number of dimensions, are provided.
+"""
 function hm_init(
     result::HMIData{T, I, V},
     settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     if result.dataset1.N < result.dataset1.P * _minpoints_per_dimension || result.dataset2.N < result.dataset2.P * _minpoints_per_dimension
-        @error "Not enough points for integration"
+        @error "Not enough samples for integration"
     end
     @assert result.dataset1.P == result.dataset2.P
 
@@ -87,12 +85,9 @@ function hm_init(
 end
 
 """
-function hm_whiteningtransformation!(
-    result::HMIData{T, I, V},
-    settings::HMISettings) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+function hm_whiteningtransformation!(result, settings)
 
-Applies a whitening transformation to the samples. A custom whitening method used can be chosen by replacing the default whitening function (Cholesky)
-in the HMISettings struct.
+Applies a whitening transformation to the samples. A custom whitening method can be used by overriding settings.whitening_function!
 """
 function hm_whiteningtransformation!(
     result::HMIData{T, I, V},
@@ -245,16 +240,6 @@ function hm_combineresults_covweighted!_dataset(
     HMIEstimate(i_cov, sqrt(e_cov), weights_cov), dat
 end
 
-"""
-function findtolerance(
-    dataset::DataSet{T, I},
-    ntestcubes::I,
-    pts::I) where {T<:AbstractFloat, I<:Integer}
-
-This function calculates the parameter λ, which describes the expectation on the number of samples,
-that are expected to be added to the hyper-cube in advance before making the change. If the expectation is met,
-i.e. sufficient samples are added, the the volume change is performed during the hyper-rectangle creation process.
-"""
 function findtolerance(
     dataset::DataSet{T, I},
     ntestcubes::I,
