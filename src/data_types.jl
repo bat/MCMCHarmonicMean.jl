@@ -286,6 +286,8 @@ mutable struct HMIData{T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     volumelist2::Vector{IntegrationVolume{T, I, V}}
     cubelist1::Vector{V}
     cubelist2::Vector{V}
+    iterations1::Vector{I}
+    iterations2::Vector{I}
     rejectedrects1::Vector{I}
     rejectedrects2::Vector{I}
     integrals1::IntermediateResults{T}
@@ -306,6 +308,8 @@ function HMIData(
         Vector{IntegrationVolume{T, I, dataType}}(undef, 0),
         Vector{dataType}(undef, 0),
         Vector{dataType}(undef, 0),
+        zeros(I, 0),
+        zeros(I, 0),
         zeros(I, 0),
         zeros(I, 0),
         IntermediateResults(T, 0),
