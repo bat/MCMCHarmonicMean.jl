@@ -55,6 +55,7 @@ function hm_integrate!(
     hm_create_integrationvolumes!(result, settings)
     hm_integrate_integrationvolumes!(result, settings)
 
+    @info "Estimating Uncertainty"
     #see my master thesis for details
     result.integralestimates["legacy result"] = hm_combineresults_legacy!(result)
 

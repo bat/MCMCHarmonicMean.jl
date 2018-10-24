@@ -31,6 +31,7 @@ mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     logprob::Array{T, 1}
     weights::Array{T, 1}
     ids::Array{I, 1}    #used to divide the dataset into sub-sets
+    sortids::Array{I, 1}#used to calculate the ess on the unsorted dataset
     N::I
     P::I
     nsubsets::I    #number of sub-sets
@@ -91,8 +92,7 @@ function DataSet(
             batch_currentsize = 0.0
         end
     end
-
-    DataSet(data, logprob, weights, ids, N, P, nsubsets, subsetsize, false, true, SpacePartitioningTree(T, Int64), zeros(Int64, 0), T(0))
+    DataSet(data, logprob, weights, ids, [i for i=1:N], N, P, nsubsets, subsetsize, false, true, SpacePartitioningTree(T, Int64), zeros(Int64, 0), T(0))
 end
 
 Base.show(io::IO, data::DataSet) = print(io, "DataSet: $(data.N) samples, $(data.P) parameters")

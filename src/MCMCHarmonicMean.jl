@@ -16,8 +16,10 @@ using DataStructures
 using RecipesBase
 using LaTeXStrings
 using Base.CoreLogging
+using Cuba
+using BAT
 
-include("spatial_volume.jl")
+#include("spatial_volume.jl")
 
 
 include("data_types.jl")
