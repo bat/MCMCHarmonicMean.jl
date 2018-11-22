@@ -22,7 +22,7 @@ function hm_create_integrationvolumes!(
             (result.dataset2.isnew ? length(result.volumelist2) : 0)
 
     if nvols > 0
-        @info "Updating $nvols Hyperrectangles of Data Set 1 using $(_global_mt_setting ? nthreads() : 1) thread(s)"
+        @info "Updating $nvols Hyperrectangles using $(_global_mt_setting ? nthreads() : 1) thread(s)"
         progressbar = Progress(nvols)
 
         result.dataset2.isnew && hm_update_integrationvolumes_dataset!(result.dataset2, result.volumelist1, progressbar)

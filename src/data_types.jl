@@ -330,7 +330,11 @@ function Base.show(io::IO, ires::HMIData)
     #    output *= "\n\tLegacy Integral Estimate Combination:\t $(ires.integralestimates["legacy result"].final)"
     #end
     if haskey(ires.integralestimates, "cov. weighted result")
-        output *= "\n\tIntegral Estimate:\t $(ires.integralestimates["cov. weighted result"].final)"
+        output *= "\n\tIntegral Estimate (cov. weighted):\t $(ires.integralestimates["cov. weighted result"].final)"
+    end
+
+    if haskey(ires.integralestimates, "analytic")
+        output *= "\n\tIntegral Estimate (analytic):\t\t $(ires.integralestimates["analytic"].final)"
     end
 
     println(io, output)

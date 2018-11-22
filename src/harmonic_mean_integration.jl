@@ -62,6 +62,8 @@ function hm_integrate!(
     #see arXiv:1808.08051 for details
     result.integralestimates["cov. weighted result"] = hm_combineresults_covweighted!(result)
 
+    result.integralestimates["analytic"] = hm_combineresults_analyticestimation!(result)
+
     result
 end
 
@@ -206,25 +208,24 @@ end
 
 function hm_combineresults_covweighted!(result::HMIData{T, I, V}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     result_covweighted = HMIResult(T)
-    result_covweighted.result1, result_covweighted.dat1 = hm_combineresults_covweighted!_dataset(result.dataset1,
+    result_covweighted.result1, result_covweighted.dat1 = hm_combineresults_covweighted_dataset!(result.dataset1,
         result.integrals2, result.volumelist2)
-    result_covweighted.result2, result_covweighted.dat2 = hm_combineresults_covweighted!_dataset(result.dataset2,
+    result_covweighted.result2, result_covweighted.dat2 = hm_combineresults_covweighted_dataset!(result.dataset2,
         result.integrals1, result.volumelist1)
     result_covweighted.final = HMIEstimate(result_covweighted.result1, result_covweighted.result2)
 
     result_covweighted
 end
 
-function hm_combineresults_covweighted!_dataset(
+function hm_combineresults_covweighted_dataset!(
     dataset::DataSet{T, I},
     integralestimates::IntermediateResults{T},
     volumes::Array{IntegrationVolume{T, I, V}, 1}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
 
     dat = Dict{String, Any}()
-    dat["Σ"] = Σ = cov(integralestimates.Y) ./ dataset.nsubsets
-    dat["overlap"] = overlap = calculate_overlap(dataset, volumes, integralestimates)
-
     M = length(integralestimates)
+
+    dat["Σ"] = Σ = cov(integralestimates.Y) ./ dataset.nsubsets
 
     weights_cov = 1 ./ diag(Σ)
     weights_cov /= sum(weights_cov)
@@ -239,6 +240,79 @@ function hm_combineresults_covweighted!_dataset(
     end
 
     HMIEstimate(i_cov, sqrt(e_cov), weights_cov), dat
+end
+
+function hm_combineresults_analyticestimation!(result::HMIData{T, I, V}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+    result_analytic = HMIResult(T)
+    result_analytic.result1, result_analytic.dat1 = hm_combineresults_analyticestimation_dataset!(result.dataset1,
+        result.whiteningresult.determinant, result.integrals2, result.volumelist2)
+    result_analytic.result2, result_analytic.dat2 = hm_combineresults_analyticestimation_dataset!(result.dataset2,
+        result.whiteningresult.determinant, result.integrals1, result.volumelist1)
+    result_analytic.final = HMIEstimate(result_analytic.result1, result_analytic.result2)
+
+    result_analytic
+end
+
+function hm_combineresults_analyticestimation_dataset!(
+    dataset::DataSet{T, I},
+    determinant::T,
+    integralestimates::IntermediateResults{T},
+    volumes::Array{IntegrationVolume{T, I, V}, 1}) where {T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
+
+    dat = Dict{String, Any}()
+
+    uncertainty_r = Array{T, 1}(undef, length(integralestimates.integrals))
+    uncertainty_Y = Array{T, 1}(undef, length(integralestimates.integrals))
+    uncertainty_tot = Array{T, 1}(undef, length(integralestimates.integrals))
+    f_min = Array{T, 1}(undef, length(integralestimates.integrals))
+    f_max = Array{T, 1}(undef, length(integralestimates.integrals))
+    μ_Z = Array{T, 1}(undef, length(integralestimates.integrals))
+    σ_μZ_sq = Array{T, 1}(undef, length(integralestimates.integrals))
+    integral1 = Array{T, 1}(undef, length(integralestimates.integrals))
+    integral2 = Array{T, 1}(undef, length(integralestimates.integrals))
+    ess = Array{T, 1}(undef, length(integralestimates.integrals))
+
+    @mt for i in threadpartition(eachindex(integralestimates.integrals), mt_nthreads())
+        uncertainty_r[i], uncertainty_Y[i], uncertainty_tot[i], f_min[i], f_max[i], μ_Z[i], σ_μZ_sq[i], integral1[i], integral2[i], ess[i] =
+            calculateuncertainty(dataset, volumes[integralestimates.volumeID[i]], determinant, integralestimates.integrals[i])
+    end
+
+    dat["uncertainty_r"] = uncertainty_r
+    dat["uncertainty_Y"] = uncertainty_Y
+    dat["uncertainty_tot"] = uncertainty_tot
+    dat["f_min"] = f_min
+    dat["f_max"] = f_max
+    dat["μ_Z"] = μ_Z
+    dat["σ_μZ_sq"] = σ_μZ_sq
+    dat["integral1"] = integral1
+    dat["integral2"] = integral2
+    dat["ess"] = ess
+
+    weights_cov = 1 ./ uncertainty_tot
+    weights_cov /= sum(weights_cov)
+
+    i_cov = mean(integralestimates.integrals, AnalyticWeights(weights_cov))
+
+    dat["overlap"] = overlap = calculate_overlap(dataset, volumes, integralestimates)
+    M = length(integralestimates)
+
+    Σ = Array{T, 2}(undef, M, M)
+    for i=1:M
+        for j=1:M
+            Σ[i,j] =  uncertainty_tot[i] * uncertainty_tot[j] * overlap[i, j]
+        end
+    end
+    dat["Σ"] = Σ
+
+    e_cov = 0.0
+    for i=1:M
+        for j=1:M
+            e_cov += weights_cov[i] * weights_cov[j] * Σ[i, j]
+        end
+    end
+
+    HMIEstimate(i_cov, sqrt(e_cov), weights_cov), dat
+
 end
 
 function findtolerance(
