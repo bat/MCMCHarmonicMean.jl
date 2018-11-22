@@ -123,10 +123,11 @@ mutable struct HMISettings
     useMultiThreading::Bool
     warning_minstartingids::Integer
     dotrimming::Bool
+    uncertainty_estimators::Dict{String, Function}
 end
-HMIFastSettings() =      return HMISettings(cholesky_whitening!, 100,   0.1, 0.1, true, 16, true)
-HMIStandardSettings() =  return HMISettings(cholesky_whitening!, 1000,  0.5, 0.1, true, 16, true)
-HMIPrecisionSettings() = return HMISettings(cholesky_whitening!, 10000, 2.5, 0.1, true, 16, true)
+HMIFastSettings() =      return HMISettings(cholesky_whitening!, 100,   0.1, 0.1, true, 16, true, Dict("cov. weighted result" => hm_combineresults_covweighted!))
+HMIStandardSettings() =  return HMISettings(cholesky_whitening!, 1000,  0.5, 0.1, true, 16, true, Dict("cov. weighted result" => hm_combineresults_covweighted!, "analytic result" => hm_combineresults_analyticestimation!))
+HMIPrecisionSettings() = return HMISettings(cholesky_whitening!, 10000, 2.5, 0.1, true, 16, true, Dict("cov. weighted result" => hm_combineresults_covweighted!, "analytic result" => hm_combineresults_analyticestimation!))
 
 """
     WhiteningResult{T<:AbstractFloat}
@@ -322,19 +323,23 @@ function HMIData(dataset::DataSet{T, I})::HMIData{T, I} where {T<:AbstractFloat,
     HMIData(split_dataset(dataset)...)
 end
 
+function HMIData(bat_samples::Tuple{DensitySampleVector, MCMCSampleIDVector, MCMCBasicStats, AbstractVector{<:MCMCIterator}})
+    logprob = bat_samples[1].log_value
+    weights = bat_samples[1].weight
+    samples = convert(Array{eltype(logprob), 2}, bat_samples[1].params)
+    ds = DataSet(samples, logprob, weights)
+    HMIData(ds)
+end
+
+
+
 
 function Base.show(io::IO, ires::HMIData)
-    output = "Data Set 1: $(length(ires.volumelist1)) Volumes, Data Set 2: $(length(ires.volumelist2)) Volumes"
+    output = "Parameters: $(ires.dataset1.P)\tTotal Samples: $(ires.dataset1.N + ires.dataset2.N)"
+    output *= "\nData Set 1: $(length(ires.volumelist1)) Volumes\nData Set 2: $(length(ires.volumelist2)) Volumes"
 
-    #if haskey(ires.integralestimates, "legacy result")
-    #    output *= "\n\tLegacy Integral Estimate Combination:\t $(ires.integralestimates["legacy result"].final)"
-    #end
-    if haskey(ires.integralestimates, "cov. weighted result")
-        output *= "\n\tIntegral Estimate (cov. weighted):\t $(ires.integralestimates["cov. weighted result"].final)"
-    end
-
-    if haskey(ires.integralestimates, "analytic")
-        output *= "\n\tIntegral Estimate (analytic):\t\t $(ires.integralestimates["analytic"].final)"
+    for pair in ires.integralestimates
+        output *= "\n\nIntegral Estimate ($(pair[1])):\n\t $(pair[2].final)"
     end
 
     println(io, output)

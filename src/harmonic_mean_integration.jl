@@ -55,14 +55,15 @@ function hm_integrate!(
     hm_create_integrationvolumes!(result, settings)
     hm_integrate_integrationvolumes!(result, settings)
 
-    @info "Estimating Uncertainty"
-    #see my master thesis for details
-    result.integralestimates["legacy result"] = hm_combineresults_legacy!(result)
+    for pair in settings.uncertainty_estimators
+        @info "Estimating Uncertainty ($(pair[1]))"
+        result.integralestimates[pair[1]] = pair[2](result)
+    end
 
-    #see arXiv:1808.08051 for details
-    result.integralestimates["cov. weighted result"] = hm_combineresults_covweighted!(result)
-
-    result.integralestimates["analytic"] = hm_combineresults_analyticestimation!(result)
+    #Possible Uncertainty Estimators:
+    #hm_combineresults_legacy!      see my master thesis for details
+    #hm_combineresults_covweighted!  see arXiv:1808.08051 for details
+    #hm_combineresults_analyticestimation! based on analytic uncertainty of both Z (see thesis) and r (binomial error)
 
     result
 end
