@@ -20,11 +20,19 @@ isinitialized(x::SpacePartitioningTree) = !(iszero(x.cuts) && iszero(x.leafsize)
 
 Holds the MCMC output. For construction use constructor: function DataSet{T<:Real}(data::Matrix{T}, logprob::Vector{T}, weights::Vector{T})
 # Variables
-- 'data::Matrix{T}' : An P x N array with N data points with P parameters.
-- 'logprob::Vector{T}' : The logarithmic probability for each data point
-- 'weights::Vector{T}' : How often each sample occurred. Set to an array of ones if working directly on MCMC output
-- 'N::I' : number of data points.
-- 'P::I' : number of parameters.
+- 'data' : An P x N array with N data points with P parameters.
+- 'logprob' : The logarithmic probability for each samples stored in an array
+- 'weights' : How often each sample occurred. Set to an array of ones if working directly on MCMC output
+- 'ids' : Array which is used to assign each sample to a batch, required for the cov. weighed uncertainty estimation
+- .sortids : an array of indices which stores the original ordering of the samples (the space partitioning tree reorders the samples), required to calculate an effective sample size.
+- 'N' : number of samples
+- 'P' : number of parameters
+- 'nsubsets' : the number of batches
+- 'iswhitened' : a boolean value which indicates whether the data set is iswhitened
+- 'isnew' : a boolean value which indicates whether the data set was swapped out with a different one (it is possible to redo the integration with a different sample set using previously generated hyper-rectangles)
+- 'partitioningtree' : The space partitioning tree, used to efficiently identify samples in a point cloud
+- 'startingIDs' : The Hyper-Rectangle Seed Samples are stored in this array
+- 'tolerance' : A threshold required for the hyper-rectangle creation process.
 """
 mutable struct DataSet{T<:AbstractFloat, I<:Integer}
     data::Array{T, 2}
@@ -113,6 +121,9 @@ HMIPrecisionSettings()
 - 'rect_increase::AbstractFloat' : describes the procentual rectangle volume increase/decrease during hyperrectangle creation. Low values can increase the precision if enough points are available but can cause systematically wrong results if not enough points are available.
 - 'use_all_rects::Bool' : All rectangles are used for the integration process no matter how big their overlap is. If enabled the rectangles are weighted by their overlap.
 - 'useMultiThreading' : activate multithreading support.
+- 'warning_minstartingids' : the required minimum amount of starting samples
+- 'dotrimming' : determines whether the integral estimates are trimmed (1σ trim) before combining them into a final result (more robust)
+- 'uncertainty_estimators' : A dictionary of different uncertainty estimator functions. Currently three functions are available: hm_combineresults_legacy! (outdated, overestimates uncertainty significantly in higher dimensions), hm_combineresults_covweighted! (very fast) and hm_combineresults_analyticestimation! (recommended)
 end
 """
 mutable struct HMISettings
@@ -134,10 +145,10 @@ HMIPrecisionSettings() = return HMISettings(cholesky_whitening!, 10000, 2.5, 0.1
 
 Stores the information obtained during the Whitening Process
 # Variables
-- 'determinant::T' : The determinant of the whitening matrix
-- 'targetprobfactor::T' : The suggested target probability factor
-- 'whiteningmatrix::Matrix{T}' : The whitening matrix
-- 'meanvalue::Vector{T}' : the mean vector of the input data
+- 'determinant' : The determinant of the whitening matrix
+- 'targetprobfactor' : The suggested target probability factor
+- 'whiteningmatrix' : The whitening matrix
+- 'meanvalue' : the mean vector of the input data
 """
 struct WhiteningResult{T<:AbstractFloat}
     determinant::T
@@ -153,18 +164,14 @@ isinitialized(x::WhiteningResult) = !(iszero(x.determinant) && iszero(x.targetpr
     SearchResult{T<:AbstractFloat, I<:Integer}
 
 Stores the results of the space partitioning tree's search function
+
 # Variables
-- 'pointIDs::Vector{I}' : the IDs of
-nsamples = 10000
-pdf_gauss(x, σ, μ) = log(1.0 / sqrt(2 * pi * σ^2) * exp(-(x-μ)^2 / (2σ^2)))
-samples = randn(1, nsamples)
-ds = DataSet(samples, pdf_gauss.(samples[1, :], 1.0, 0.0), ones(nsamples))
-data = HMIData(ds) the points found, might be empty because it is optional
-- 'points::I' : The number of points found.
-- 'maxLogProb::T' : the maximum log. probability of the points found.
-- 'minLogProb::T' : the minimum log. probability of the points found.
-- 'maxWeightProb::T' : the weighted minimum log. probability found.
-- 'minWeightProb::T' : the weighted maximum log. probfactor found.
+- 'pointIDs' : the IDs of samples found, might be empty because it is optional
+- 'points' : The number of points found.
+- 'maxLogProb' : the maximum log. probability of the points found.
+- 'minLogProb' : the minimum log. probability of the points found.
+- 'maxWeightProb' : the weighted minimum log. probability found.
+- 'minWeightProb' : the weighted maximum log. probfactor found.
 """
 mutable struct SearchResult{T<:AbstractFloat, I<:Integer}
     pointIDs::Vector{I}
@@ -188,14 +195,15 @@ Base.show(io::IO, sres::SearchResult) = print(io, "Search Result: Points: $(sres
 
 Stores the information of the points of an e.g. HyperRectVolume
 # Variables
-- 'maxLogProb::T' : The maximum log. probability of one of the points inside the hyper-rectangle
-- 'minLogProb::T' : The minimum log. probability of one of the points inside the hyper-rectangle
-- 'maxWeightProb::T' : the weighted max. log. probability
-- 'minWeightProb::T' : the weighted min. log. probability
-- 'probfactor::T' : The probability factor of the hyper-rectangle
-- 'probweightfactor::T' : The weighted probability factor
-- 'points::I' : The number of points inside the hyper-rectangle
-- 'pointIDs::Vector{I}' : the IDs of the points inside the hyper-rectangle, might be empty because it is optional and costs performance
+- 'maxLogProb' : The maximum log. probability of one of the points inside the hyper-rectangle
+- 'minLogProb' : The minimum log. probability of one of the points inside the hyper-rectangle
+- 'maxWeightProb' : the weighted max. log. probability
+- 'minWeightProb' : the weighted min. log. probability
+- 'probfactor' : The probability factor of the hyper-rectangle
+- 'probweightfactor' : The weighted probability factor
+- 'points' : The number of points inside the hyper-rectangle
+- 'pointIDs' : the IDs of the points inside the hyper-rectangle, might be empty because it is optional and costs performance
+- 'searchres' : used to boost performance
 """
 mutable struct PointCloud{T<:AbstractFloat, I<:Integer}
     maxLogProb::T
@@ -216,9 +224,9 @@ Base.show(io::IO, cloud::PointCloud) = print(io, "Point Cloud with $(cloud.point
     IntegrationVolume{T<:AbstractFloat, I<:Integer}
 
 # Variables
-- 'pointcloud::PointCloud{T, I}' : holds the point cloud of the integration volume
-- 'spatialvolume::SpatialVolume{T}' : the boundaries of the integration volume
-- 'volume::T' : the volume
+- 'pointcloud' : holds the point cloud of the integration volume
+- 'spatialvolume' : the boundaries of the integration volume
+- 'volume' : the volume
 
 Hold the point cloud and the spatial volume for integration.
 """
@@ -269,15 +277,18 @@ Includes all the informations of the integration process, including a list of hy
 the starting ids, and the average number of points and volume of the created hyper-rectangles.
 
 # Variables
-- 'integral::T' : The Harmonic Mean integration result
-- 'error::T' : an error estimation. the quality of the error estimation depends on the number of hyper-rectangles created (the more the better)
-- 'nvols::I' : the number of hyper-rectangles used for the integration
-- 'points::T' : average number of points
-- 'volume::T' : average volume
-- 'volumelist::Vector{IntegrationVolume{T, I}}' : a list of the hyper-rectangles
-- 'startingIDs::Vector{I}' : a list of possible starting points for the hyper-rectangle creation process
-- 'whiteningresult::WhiteningResult{T}' : the results of the whitening transformation
-- 'integrals::Vector{T}' : The integral estimates of the different hyper-rectangles
+- 'dataset1' : Data Set 1
+- 'dataset2' : Data Set 2
+- 'whiteningresult' : contains the whitening matrix and its determinant, required to scale the final integral estimate
+- 'volumelist1' : An array of integration volumes created using dataset1, but filled with samples from dataset2
+- 'volumelist2' : An array of integration volumes created using dataset2, but filled with samples from dataset1
+- 'cubelist1' : An array of small hyper-cubes created around seeding samples of dataset 1
+- 'cubelist2' : An array of small hyper-cubes created around seeding samples of dataset 2
+- 'iterations1' : The number of volume adapting iterations for the creating volumelist1
+- 'iterations2' : The number of volume adapting iterations for the creating volumelist2
+- 'rejectedrects1' : An array of ids, indicating which hyper-rectangles of volumelist1 were rejected due to trimming
+- 'rejectedrects2' : An array of ids, indicating which hyper-rectangles of volumelist2 were rejected due to trimming
+- 'integralestimates' : A dictionary containing the final integral estimates with uncertainty estimation using different uncertainty estimators. Also includes all intermediate results required for the integral estimate combination
 """
 mutable struct HMIData{T<:AbstractFloat, I<:Integer, V<:SpatialVolume}
     dataset1::DataSet{T, I}
