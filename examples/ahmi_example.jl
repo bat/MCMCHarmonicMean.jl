@@ -1,5 +1,6 @@
 using BAT
 using MCMCHarmonicMean
+using UnsafeArrays
 
 #Model definition to generate samples from a n-dim gaussian shell
 struct GaussianShellDensity<:AbstractDensity
@@ -11,10 +12,10 @@ end
 BAT.nparams(model::GaussianShellDensity) = model.dimensions
 
 #optional define exec_capabilities of our likelihood
-BAT.exec_capabilities(::typeof(BAT.unsafe_density_logval), target::GaussianShellDensity, params::AbstractVector{<:Real}) = ExecCapabilities(0, true, 0, true)
+BAT.exec_capabilities(::typeof(BAT.unsafe_density_logval), target::GaussianShellDensity, params::AbstractArray) = ExecCapabilities(0, true, 0, true)
 
 #define likelihood for the Gaussian Shell
-function BAT.unsafe_density_logval(target::GaussianShellDensity, params::Vector{Float64}, exec_context::ExecContext = ExecContext())
+function BAT.unsafe_density_logval(target::GaussianShellDensity, params::AbstractArray{Float64, 1}, exec_context::ExecContext = ExecContext())
     diff::Float64 = 0
     for i in eachindex(params)
         diff += (target.lambda[i] - params[i]) * (target.lambda[i] - params[i])
@@ -51,8 +52,7 @@ sample() = rand(chainspec, nsamples, chains)
 
 #BAT.jl samples
 bat_samples = sample()
-ds = DataSet(convert(Array{Float64, 2}, bat_samples[1].params), bat_samples[1].log_value, bat_samples[1].weight)
-data = HMIData(ds)
+data = HMIData(bat_samples)
 hm_integrate!(data)
 
 using Plots; pyplot()

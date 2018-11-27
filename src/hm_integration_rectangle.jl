@@ -10,9 +10,11 @@ function hm_create_integrationvolumes!(
         progressbar = Progress(nvols)
 
         isempty(result.volumelist1) && hm_create_integrationvolumes_dataset!(
-            result.dataset1, result.volumelist1, result.cubelist1, result.iterations1, result.whiteningresult.targetprobfactor, progressbar, settings)
+            result.dataset1, result.volumelist1, result.cubelist1, result.iterations1, result.whiteningresult.targetprobfactor,
+                progressbar, settings)
         isempty(result.volumelist2) && hm_create_integrationvolumes_dataset!(
-            result.dataset2, result.volumelist2, result.cubelist2, result.iterations2, result.whiteningresult.targetprobfactor, progressbar, settings)
+            result.dataset2, result.volumelist2, result.cubelist2, result.iterations2, result.whiteningresult.targetprobfactor,
+                progressbar, settings)
 
         finish!(progressbar)
     end
@@ -50,6 +52,7 @@ function hm_create_integrationvolumes_dataset!(
     thread_iterations = Vector{I}(undef, length(dataset.startingIDs))
 
     atomic_centerID = Atomic{I}(1)
+
     @mt MCMCHarmonicMean.hyperrectangle_creationproccess!(dataset, targetprobfactor, settings,
         thread_volumes, thread_cubes, thread_iterations, atomic_centerID, progressbar)
 
@@ -75,7 +78,8 @@ function hm_update_integrationvolumes_dataset!(
 
     maxPoints = zero(T)
 
-    @mt for i in threadpartition(eachindex(volumes), mt_nthreads())
+    wp_volumes = workpart(volumes, ParallelProcessingTools.workers(), ParallelProcessingTools.myid())
+    @mt for i in workpart(eachindex(wp_volumes), mt_nthreads(), threadid())
         update!(volumes[i], dataset)
 
         maxPoints = max(maxPoints, volumes[i].pointcloud.points)

@@ -10,7 +10,8 @@ function calculate_overlap(
 
     sortedsets = SortedSet.([volumes[integralestimates.volumeID[i]].pointcloud.pointIDs for i = 1:M])
 
-    @mt for i in threadpartition(1:M, mt_nthreads())
+    idx = workpart(1:M, ParallelProcessingTools.workers(), ParallelProcessingTools.myid())
+    @mt for i in workpart(idx, mt_nthreads(), threadid())
         for j = 1:M
             intersectpts = intersect(sortedsets[i], sortedsets[j])
             unionpts = union(sortedsets[i], sortedsets[j])
@@ -64,17 +65,14 @@ function calculateuncertainty(dataset::DataSet{T, I}, volume::IntegrationVolume{
     y_r = (x::Float64) -> Float64(x_min + (x_max - x_min) * x)
 
 
-    ess = BAT.ESS(vol_samples, vol_weights)
-    ess_total = BAT.ESS(dataset.data[:, dataset.sortids], dataset.weights[dataset.sortids])
+    ess = BAT.effective_sample_size(vol_samples, vol_weights)
+    ess_total = BAT.effective_sample_size(dataset.data[:, dataset.sortids], dataset.weights[dataset.sortids])
 
     f = 1 ./ exp.(dataset.logprob[volume.pointcloud.pointIDs])
 
     μ_Z = mean(f)
-    if ess<0
-        #guessing ess if calculation failed
-        ess = ess_total / total_weight * vol_weight
-        @warn "ESS calculation failed (negative ESS). Using ESS scaling factor based on the total dataset instead"
-    end
+    @assert ess>0
+
     σ_μZ_sq = var(f) / ess
 
     f_max = maximum(f)

@@ -11,7 +11,9 @@ This macro evaluates code either multi-threaded or single-threaded dependent on 
 macro mt(expr)
     quote
         if _global_mt_setting
-            @onallthreads $(esc(expr))
+            @onthreads mt_nthreads() begin
+                $(esc(expr))
+            end
         else
             $(esc(expr))
         end
@@ -19,7 +21,7 @@ macro mt(expr)
 end
 
 function mt_nthreads()
-    _global_mt_setting ? nthreads() : 1
+    _global_mt_setting ? allthreads() : 1
 end
 const _minpoints_per_dimension = 50
 
@@ -273,7 +275,8 @@ function hm_combineresults_analyticestimation_dataset!(
     integral2 = Array{T, 1}(undef, length(integralestimates.integrals))
     ess = Array{T, 1}(undef, length(integralestimates.integrals))
 
-    @mt for i in threadpartition(eachindex(integralestimates.integrals), mt_nthreads())
+    wp_integralestimates = workpart(integralestimates.integrals, ParallelProcessingTools.workers(), ParallelProcessingTools.myid())
+    @mt for i in workpart(eachindex(wp_integralestimates), mt_nthreads(), threadid())
         uncertainty_r[i], uncertainty_Y[i], uncertainty_tot[i], f_min[i], f_max[i], μ_Z[i], σ_μZ_sq[i], integral1[i], integral2[i], ess[i] =
             calculateuncertainty(dataset, volumes[integralestimates.volumeID[i]], determinant, integralestimates.integrals[i])
     end
@@ -285,8 +288,8 @@ function hm_combineresults_analyticestimation_dataset!(
     dat["f_max"] = f_max
     dat["μ_Z"] = μ_Z
     dat["σ_μZ_sq"] = σ_μZ_sq
-    dat["integral1"] = integral1
-    dat["integral2"] = integral2
+    dat["integral1_sq_cuba"] = integral1
+    dat["integral2_cuba"] = integral2
     dat["ess"] = ess
 
     weights_cov = 1 ./ uncertainty_tot
@@ -399,7 +402,8 @@ function hm_integrate_integrationvolumes!_dataset(
     integralestimates = IntermediateResults(T, length(volumes))
     integralestimates.Y = zeros(T, dataset.nsubsets, length(volumes))
 
-    @mt for i in threadpartition(eachindex(volumes), mt_nthreads())
+    wp_volumes = workpart(volumes, ParallelProcessingTools.workers(), ParallelProcessingTools.myid())
+    @mt for i in workpart(eachindex(wp_volumes), mt_nthreads(), threadid())
         integralestimates.Y[:, i], integralestimates.integrals[i] = integrate_hyperrectangle_cov(dataset, volumes[i], determinant)
 
         lock(_global_lock) do
